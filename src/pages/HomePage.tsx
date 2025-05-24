@@ -27,9 +27,14 @@ const HomePage: React.FC = () => {
   const [activeDrawingTool, setActiveDrawingTool] = useState<'polygon' | 'rectangle' | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [featureCount, setFeatureCount] = useState(0);
-  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [featureCount, setFeatureCount] = useState(0);  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
+  const [overlaySettings, setOverlaySettings] = useState({
+    borders: false,
+    contour: false,
+    labels: true,
+    roads: false
+  });
   const mapRef = useRef<OpenLayersMapHandle>(null);
 
   const handleLocationSelect = useCallback((location: [number, number], zoom?: number) => {
@@ -134,10 +139,18 @@ const HomePage: React.FC = () => {
   const handleLayersMenuClose = useCallback(() => {
     setLayersMenuOpen(false);
   }, []);
-
   const handleLayerSelect = useCallback((layerId: LayerType) => {
     setCurrentLayer(layerId);
     setSnackbarMessage(`Выбран слой: ${layerId}`);
+    setSnackbarOpen(true);
+  }, []);
+
+  const handleOverlayChange = useCallback((overlay: string, checked: boolean) => {
+    setOverlaySettings(prev => ({
+      ...prev,
+      [overlay]: checked
+    }));
+    setSnackbarMessage(`${checked ? 'Включен' : 'Выключен'} слой: ${overlay}`);
     setSnackbarOpen(true);
   }, []);
 
@@ -212,12 +225,13 @@ const HomePage: React.FC = () => {
           activeDrawingTool={activeDrawingTool}
           hasFeatures={featureCount > 0}
         />
-        
-        <LayersMenu
+          <LayersMenu
           open={layersMenuOpen}
           onClose={handleLayersMenuClose}
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
+          overlaySettings={overlaySettings}
+          onOverlayChange={handleOverlayChange}
         />
       </Box>
 
