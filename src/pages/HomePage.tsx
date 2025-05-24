@@ -13,6 +13,7 @@ import {
 import { ThemeContext } from '../ThemeContext';
 import LeftSidebar from '../components/LeftSidebar';
 import RightSidebar from '../components/RightSidebar';
+import LayersMenu, { LayerType } from '../components/LayersMenu';
 import OpenLayersMap, { OpenLayersMapHandle } from '../components/OpenLayersMap';
 import SearchLocation from '../components/SearchLocation';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -27,6 +28,8 @@ const HomePage: React.FC = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [featureCount, setFeatureCount] = useState(0);
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
   const mapRef = useRef<OpenLayersMapHandle>(null);
 
   const handleLocationSelect = useCallback((location: [number, number], zoom?: number) => {
@@ -120,9 +123,22 @@ const HomePage: React.FC = () => {
       setSnackbarOpen(true);
     }
   }, []);
-
   const handleCloseSnackbar = useCallback(() => {
     setSnackbarOpen(false);
+  }, []);
+
+  const handleLayersClick = useCallback(() => {
+    setLayersMenuOpen(true);
+  }, []);
+
+  const handleLayersMenuClose = useCallback(() => {
+    setLayersMenuOpen(false);
+  }, []);
+
+  const handleLayerSelect = useCallback((layerId: LayerType) => {
+    setCurrentLayer(layerId);
+    setSnackbarMessage(`Выбран слой: ${layerId}`);
+    setSnackbarOpen(true);
   }, []);
 
   return (
@@ -170,7 +186,7 @@ const HomePage: React.FC = () => {
           overflow: 'hidden',
         }}
       >
-        <LeftSidebar />
+        <LeftSidebar onLayersClick={handleLayersClick} />
         <Box
           sx={{
             flexGrow: 1,
@@ -189,13 +205,19 @@ const HomePage: React.FC = () => {
             onFeatureAdded={handleFeatureAdded}
             onFeatureCountChange={handleFeatureCountChange}
           />
-        </Box>
-        <RightSidebar
+        </Box>        <RightSidebar
           onToolSelect={handleToolSelect}
           onDrawingToolSelect={handleDrawingToolSelect}
           onClearAllFeatures={handleClearAllFeatures}
           activeDrawingTool={activeDrawingTool}
           hasFeatures={featureCount > 0}
+        />
+        
+        <LayersMenu
+          open={layersMenuOpen}
+          onClose={handleLayersMenuClose}
+          onLayerSelect={handleLayerSelect}
+          currentLayer={currentLayer}
         />
       </Box>
 

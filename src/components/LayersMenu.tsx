@@ -96,7 +96,7 @@ const layerOptions: Layer[] = [
 const LayersMenu: React.FC<LayersMenuProps> = ({ open, onClose, onLayerSelect, currentLayer }) => {
   return (
     <Drawer
-      anchor="right"
+      anchor="left"
       open={open}
       onClose={onClose}
       variant="temporary"
@@ -106,6 +106,9 @@ const LayersMenu: React.FC<LayersMenuProps> = ({ open, onClose, onLayerSelect, c
         '& .MuiDrawer-paper': {
           width: 300,
           boxSizing: 'border-box',
+          marginTop: '64px', // Отступ сверху под AppBar
+          height: 'calc(100% - 64px)', // Высота с учетом верхней панели
+          marginLeft: '68px', // Отступ слева для левого сайдбара
         },
       }}
     >

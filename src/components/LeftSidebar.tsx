@@ -12,7 +12,7 @@ import {
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import PersonIcon from '@mui/icons-material/Person';
+import LayersIcon from '@mui/icons-material/Layers';
 
 interface TabContent {
   title: string;
@@ -20,11 +20,14 @@ interface TabContent {
   content: React.ReactNode;
 }
 
-const LeftSidebar: React.FC = () => {
+interface LeftSidebarProps {
+  onLayersClick?: () => void;
+}
+
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick }) => {
   const [selectedTab, setSelectedTab] = useState(0);
   const theme = useTheme();
-  
-  const tabs: TabContent[] = [
+    const tabs: TabContent[] = [
     {
       title: 'Панель управления',
       icon: <DashboardIcon />,
@@ -36,12 +39,12 @@ const LeftSidebar: React.FC = () => {
       ),
     },
     {
-      title: 'Профиль',
-      icon: <PersonIcon />,
+      title: 'Слои карты',
+      icon: <LayersIcon />,
       content: (
         <Box p={3}>
-          <h5>Ваш профиль</h5>
-          <p>Здесь вы можете редактировать свои данные профиля и настройки безопасности.</p>
+          <h5>Слои карты</h5>
+          <p>Здесь вы можете выбрать различные слои для отображения на карте.</p>
         </Box>
       ),
     },
@@ -102,14 +105,19 @@ const LeftSidebar: React.FC = () => {
           }}
         >
           <Divider sx={{ mb: 1 }} />
-          
-          {/* Вертикальное меню с вкладками - только иконки */}
+            {/* Вертикальное меню с вкладками - только иконки */}
           <List sx={{ width: '100%', p: 0 }}>
             {tabs.map((tab, index) => (
               <Tooltip key={index} title={tab.title} placement="right">
                 <ListItemButton
                   selected={selectedTab === index}
-                  onClick={() => setSelectedTab(index)}
+                  onClick={() => {
+                    setSelectedTab(index);
+                    // Если это кнопка слоев (индекс 1), вызываем onLayersClick
+                    if (index === 1 && onLayersClick) {
+                      onLayersClick();
+                    }
+                  }}
                   sx={{
                     py: 1.5,
                     justifyContent: 'center',
