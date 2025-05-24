@@ -1,0 +1,33 @@
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ol-attribution.ol-uncollapsible {
+  font-size: 10px;
+  opacity: 0.5;
+  bottom: 2px;
+  right: 2px;
+  background: transparent !important;
+}
+
+.ol-attribution.ol-collapsed button {
+  background-color: rgba(255,255,255,0.3) !important;
+}
+
+.ol-attribution:not(.ol-collapsed) {
+  background: rgba(255,255,255,0.3) !important;
+}
+
+.ol-attribution-minimal {
+  opacity: 0.5;
+  color: rgba(0,0,0,0.5) !important;
+  font-size: 10px !important; 
+}
