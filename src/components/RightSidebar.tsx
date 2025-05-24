@@ -32,43 +32,46 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
 }) => {
   const [activeToolIndex, setActiveToolIndex] = useState<number | null>(null);
   const [drawingMenuOpen, setDrawingMenuOpen] = useState(false);
-  const [showTooltips, setShowTooltips] = useState(true);
   const theme = useTheme();
   const drawingButtonRef = useRef<HTMLButtonElement | null>(null);
-    // Список инструментов
+  
+  // Список инструментов
   const tools = [
     { name: "Инструменты AOI", icon: <PolylineIcon fontSize="small" /> },
     { name: "Инструмент 2", icon: <CloseIcon fontSize="small" /> },
     { name: "Инструмент 3", icon: <CloseIcon fontSize="small" /> },
     { name: "Инструмент 4", icon: <CloseIcon fontSize="small" /> },
-  ];// Список инструментов рисования
+  ];
+  
+  // Список инструментов рисования
   const drawingTools = [
     ...(hasFeatures ? [{ name: "Очистить все", icon: <DeleteIcon fontSize="small" />, type: 'clear' as const }] : []),
     { name: "Нарисовать полигон точками", icon: <CreateIcon fontSize="small" />, type: 'polygon' as const },
     { name: "Нарисовать прямоугольник", icon: <CropSquareIcon fontSize="small" />, type: 'rectangle' as const },
     { name: "Загрузить GeoJSON", icon: <CloudUploadIcon fontSize="small" />, type: 'upload' as const },
   ];
-    // Обновляем активный инструмент при изменении внешнего состояния
+  
+  // Обновляем активный инструмент при изменении внешнего состояния
   useEffect(() => {
     if (activeDrawingTool === 'polygon' || activeDrawingTool === 'rectangle') {
       setActiveToolIndex(0); // Первый инструмент - инструмент рисования
     } else if (activeToolIndex === 0 && !activeDrawingTool) {
       setActiveToolIndex(null);
     }
-  }, [activeDrawingTool, activeToolIndex]);  // Обработчик выбора основного инструмента
+  }, [activeDrawingTool, activeToolIndex]);
+  
+  // Обработчик выбора основного инструмента
   const handleToolClick = (index: number) => {
     if (index === 0) {
       // Инструмент рисования
       if (activeToolIndex === 0 && drawingMenuOpen) {
         // Если уже активен и меню открыто - закрываем меню и деактивируем
         setDrawingMenuOpen(false);
-        setShowTooltips(true);
         setActiveToolIndex(null);
       } else {
         // Активируем кнопку и показываем меню
         setActiveToolIndex(0);
         setDrawingMenuOpen(true);
-        setShowTooltips(false);
         if (onToolSelect) onToolSelect(0);
       }
     } else {
@@ -76,7 +79,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
       const newIndex = activeToolIndex === index ? null : index;
       setActiveToolIndex(newIndex);
       setDrawingMenuOpen(false);
-      setShowTooltips(true);
+      
       // Выключаем режим рисования при выборе другого инструмента
       if (activeDrawingTool && onDrawingToolSelect) {
         onDrawingToolSelect('polygon'); // Это вызовет переключение в HomePage
@@ -85,7 +88,9 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
         onToolSelect(newIndex !== null ? newIndex : -1);
       }
     }
-  };// Обработчик выбора инструмента рисования
+  };
+  
+  // Обработчик выбора инструмента рисования
   const handleDrawingToolClick = (type: 'polygon' | 'rectangle' | 'upload' | 'clear') => {
     if (type === 'clear') {
       if (onClearAllFeatures) onClearAllFeatures();
@@ -96,32 +101,22 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
       // Для polygon/rectangle оставляем меню открытым, для upload - закрываем
       if (type === 'upload') {
         setDrawingMenuOpen(false);
-        setShowTooltips(true);
         setActiveToolIndex(null); // Выключаем активный инструмент после загрузки
       } else {
         // Для polygon/rectangle держим меню открытым
         setDrawingMenuOpen(true);
       }
     }
-  };  // Закрыть меню при клике вне него, но не если активно рисование
+  };
+  
+  // Закрыть меню при клике вне него, но не если активно рисование
   const handleClickAway = () => {
     if (!activeDrawingTool) {
       setDrawingMenuOpen(false);
-      setShowTooltips(true);
       // Если нет активного режима рисования, снимаем активность кнопки
       setActiveToolIndex(null);
     }
   };
-
-  // Восстанавливаем тултипы при закрытии меню
-  useEffect(() => {
-    if (!drawingMenuOpen) {
-      const timer = setTimeout(() => {
-        setShowTooltips(true);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [drawingMenuOpen]);
 
   return (
     <Box
@@ -143,18 +138,19 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
         gap: 1,
         zIndex: 1200,
         border: theme.palette.mode === 'dark' 
-          ? 'none'          : `1px solid ${theme.palette.divider}`,
+          ? 'none'
+          : `1px solid ${theme.palette.divider}`,
       }}
     >
       {tools.map((tool, index) => (
         <Tooltip
           key={index}
-          title={tool.name}
+          // Set title to empty string for the first button when menu is open
+          title={index === 0 && drawingMenuOpen ? "" : tool.name}
           placement="left"
           arrow
-          disableHoverListener={!showTooltips}
-          disableFocusListener={!showTooltips}
-          disableTouchListener={!showTooltips}
+          // Only open tooltips on hover
+          enterTouchDelay={500}
         >
           <IconButton
             ref={index === 0 ? drawingButtonRef : null}
@@ -184,7 +180,9 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
             {tool.icon}
           </IconButton>
         </Tooltip>
-      ))}<Popper 
+      ))}
+      
+      <Popper 
         open={drawingMenuOpen && drawingButtonRef.current !== null} 
         anchorEl={drawingButtonRef.current}
         placement="left"
