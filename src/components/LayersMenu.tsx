@@ -22,7 +22,9 @@ export type LayerType =
   | 'OSM' 
   | 'BingAerial' 
   | 'YandexSatellite'
-  | 'GoogleSatellite';
+  | 'GoogleSatellite'
+  | 'ESRISatellite'
+  | 'ESRIStreet';
 
 interface Layer {
   id: LayerType;
@@ -44,7 +46,8 @@ const layerOptions: Layer[] = [
     name: 'OpenStreetMap', 
     icon: <MapIcon />, 
     description: 'Стандартная карта OSM с улицами и зданиями'
-  },  { 
+  },
+  { 
     id: 'BingAerial', 
     name: 'Bing (спутник)', 
     icon: <SatelliteIcon />, 
@@ -61,6 +64,18 @@ const layerOptions: Layer[] = [
     name: 'Google (спутник)', 
     icon: <SatelliteIcon />, 
     description: 'Спутниковые снимки от Google Maps'
+  },
+  { 
+    id: 'ESRISatellite', 
+    name: 'ESRI (спутник)', 
+    icon: <SatelliteIcon />, 
+    description: 'Спутниковые снимки от ESRI World Imagery'
+  },
+  { 
+    id: 'ESRIStreet', 
+    name: 'ESRI (улицы)', 
+    icon: <MapIcon />, 
+    description: 'Уличная карта от ESRI World Street Map'
   }
 ];
 

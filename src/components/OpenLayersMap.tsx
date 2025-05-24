@@ -86,9 +86,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           layer.setVisible(visible);
         }
       });
-    };
-
-    // Создание базовых слоев карты
+    };    // Создание базовых слоев карты
     const createBaseLayer = (layerType: string): TileLayer => {
       switch (layerType) {
         case 'BingAerial':
@@ -112,13 +110,27 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
               attributions: '© Google'
             }),
           });
+        case 'ESRISatellite':
+          return new TileLayer({
+            source: new XYZ({
+              url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              attributions: '© Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community'
+            }),
+          });
+        case 'ESRIStreet':
+          return new TileLayer({
+            source: new XYZ({
+              url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+              attributions: '© Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community'
+            }),
+          });
         case 'OSM':
         default:
           return new TileLayer({
             source: new OSM(),
           });
       }
-    };    // Создание overlay слоев
+    };// Создание overlay слоев
     const createOverlayLayers = (layerType: string) => {
       const layers: { [key: string]: TileLayer } = {};
 
@@ -150,11 +162,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         }),
         opacity: 1.0,
         visible: true // По умолчанию включен
-      });
-
-      // Слой дорог - разные источники в зависимости от базового слоя
+      });      // Слой дорог - разные источники в зависимости от базового слоя
       const createRoadLayer = () => {
-        switch (layerType) {          case 'BingAerial':
+        switch (layerType) {
+          case 'BingAerial':
             return new TileLayer({
               source: new XYZ({
                 url: 'https://ecn.t0.tiles.virtualearth.net/tiles/h{quadkey}.jpeg?g=1',
@@ -181,9 +192,19 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
               opacity: 0.8,
               visible: false
             });
+          case 'ESRISatellite':
+            return new TileLayer({
+              source: new XYZ({
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+                attributions: '© Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, and the GIS User Community'
+              }),
+              opacity: 0.8,
+              visible: false
+            });
+          case 'ESRIStreet':
           case 'OSM':
           default:
-            // Для OSM слой дорог не нужен, так как они уже встроены
+            // Для OSM и ESRIStreet слой дорог не нужен, так как они уже встроены
             return new TileLayer({
               source: new XYZ({
                 url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', // Прозрачный пиксель
