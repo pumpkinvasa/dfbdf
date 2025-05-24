@@ -37,31 +37,37 @@ const HomePage: React.FC = () => {
   const handleToolSelect = useCallback((toolIndex: number) => {
     console.log(`Выбран инструмент ${toolIndex}`);
   }, []);
-
   const handleDrawingToolSelect = useCallback((tool: 'polygon' | 'rectangle' | 'upload') => {
-    if (activeDrawingTool === tool) {
-      setActiveDrawingTool(null);
-      setSnackbarMessage('Режим рисования выключен');
-      setSnackbarOpen(true);
-      return;
-    }
-
     switch (tool) {
       case 'polygon':
-        setActiveDrawingTool('polygon');
-        setSnackbarMessage(
-          'Режим рисования полигона точками активирован. Кликайте для добавления точек, двойной клик для завершения.',
-        );
-        setSnackbarOpen(true);
+        if (activeDrawingTool === 'polygon') {
+          setActiveDrawingTool(null);
+          setSnackbarMessage('Режим рисования полигона выключен');
+          setSnackbarOpen(true);
+        } else {
+          setActiveDrawingTool('polygon');
+          setSnackbarMessage(
+            'Режим рисования полигона точками активирован. Кликайте для добавления точек, двойной клик для завершения.',
+          );
+          setSnackbarOpen(true);
+        }
         break;
       case 'rectangle':
-        setActiveDrawingTool('rectangle');
-        setSnackbarMessage(
-          'Режим рисования прямоугольника активирован. Кликните и перетащите для создания прямоугольника.',
-        );
-        setSnackbarOpen(true);
+        if (activeDrawingTool === 'rectangle') {
+          setActiveDrawingTool(null);
+          setSnackbarMessage('Режим рисования прямоугольника выключен');
+          setSnackbarOpen(true);
+        } else {
+          setActiveDrawingTool('rectangle');
+          setSnackbarMessage(
+            'Режим рисования прямоугольника активирован. Кликните в одном углу, затем кликните в противоположном углу для создания прямоугольника.',
+          );
+          setSnackbarOpen(true);
+        }
         break;
       case 'upload':
+        // Для загрузки файлов - всегда выключаем режим рисования
+        setActiveDrawingTool(null);
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = '.geojson,.json';
@@ -89,8 +95,7 @@ const HomePage: React.FC = () => {
             };
             reader.readAsText(file);
           }
-        };
-        document.body.appendChild(fileInput);
+        };        document.body.appendChild(fileInput);
         fileInput.click();
         document.body.removeChild(fileInput);
         break;

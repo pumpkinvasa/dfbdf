@@ -11,6 +11,7 @@ import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { Draw, Modify, Snap } from 'ol/interaction';
 import Polygon from 'ol/geom/Polygon';
+import Point from 'ol/geom/Point';
 import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import GeoJSON from 'ol/format/GeoJSON';
 
@@ -18,6 +19,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 export interface OpenLayersMapHandle {
   loadGeoJSON: (geoJSON: any) => void;
   clearAllFeatures: () => void; // New method to clear all features
+  disableDrawingMode: () => void; // New method to disable drawing mode programmatically
 }
 
 interface OpenLayersMapProps {
@@ -50,36 +52,49 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     const vectorLayerRef = useRef<VectorLayer | null>(null);
     const drawInteractionRef = useRef<Draw | null>(null);
     const snapInteractionRef = useRef<Snap | null>(null);
-    const theme = useTheme();
-
-    // Стиль для отображения фигур (всегда показываем вершины)
-    const createVectorStyle = () =>
-      new Style({
-        fill: new Fill({
-          color: 'rgba(0, 179, 179, 0.2)',
-        }),
-        stroke: new Stroke({
-          color: '#00b3b3',
-          width: 2,
-        }),
-        image: new CircleStyle({
-          radius: 5,
+    const theme = useTheme();    // Стиль для отображения фигур с белыми точками на углах
+    const createVectorStyle = () => {
+      const styles = [
+        // Основной стиль для фигуры
+        new Style({
           fill: new Fill({
-            color: '#00b3b3',
+            color: 'rgba(0, 179, 179, 0.2)',
           }),
           stroke: new Stroke({
-            color: '#ffffff',
-            width: 1,
+            color: '#00b3b3',
+            width: 2,
           }),
         }),
-        geometry: function (feature) {
-          const geometry = feature.getGeometry();
-          if (geometry instanceof Polygon) {
-            return geometry; // Always show vertices for polygons
-          }
-          return geometry;
-        },
-      });
+      ];
+
+      return (feature: any) => {
+        const geometry = feature.getGeometry();
+        
+        // Добавляем белые точки на углах
+        if (geometry instanceof Polygon) {
+          const coordinates = geometry.getCoordinates()[0]; // Получаем координаты внешнего кольца
+          coordinates.slice(0, -1).forEach((coord: any) => { // Исключаем последнюю точку (дубликат первой)
+            styles.push(
+              new Style({
+                geometry: new Point(coord),
+                image: new CircleStyle({
+                  radius: 4,
+                  fill: new Fill({
+                    color: '#ffffff',
+                  }),
+                  stroke: new Stroke({
+                    color: '#00b3b3',
+                    width: 2,
+                  }),
+                }),
+              })
+            );
+          });
+        }
+        
+        return styles;
+      };
+    };
 
     // Инициализация карты
     useEffect(() => {
@@ -179,38 +194,48 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         return;
       }
 
-      mapRef.current.style.cursor = 'crosshair';
-
-      // Стиль для рисования (всегда показываем вершины)
-      const drawingStyle = new Style({
-        fill: new Fill({
-          color: 'rgba(0, 179, 179, 0.2)',
-        }),
-        stroke: new Stroke({
-          color: '#00b3b3',
-          width: 2,
-          lineDash: drawingTool === 'polygon' ? [5, 5] : undefined,
-        }),
-        image: new CircleStyle({
-          radius: 5,
-          fill: new Fill({
-            color: '#00b3b3',
+      mapRef.current.style.cursor = 'crosshair';      // Стиль для рисования с белыми точками на углах
+      const drawingStyle = (feature: any) => {
+        const styles = [
+          // Основной стиль для фигуры во время рисования
+          new Style({
+            fill: new Fill({
+              color: 'rgba(0, 179, 179, 0.2)',
+            }),
+            stroke: new Stroke({
+              color: '#00b3b3',
+              width: 2,
+              lineDash: drawingTool === 'polygon' ? [5, 5] : undefined,
+            }),
           }),
-          stroke: new Stroke({
-            color: '#ffffff',
-            width: 1,
-          }),
-        }),
-        geometry: function (feature) {
-          const geometry = feature.getGeometry();
-          if (geometry instanceof Polygon) {
-            return geometry; // Always show vertices during drawing
-          }
-          return geometry;
-        },
-      });
+        ];
 
-      const geometryType = drawingTool === 'polygon' ? 'Polygon' : 'Circle';
+        const geometry = feature.getGeometry();
+        
+        // Добавляем белые точки на углах во время рисования
+        if (geometry instanceof Polygon) {
+          const coordinates = geometry.getCoordinates()[0];
+          coordinates.slice(0, -1).forEach((coord: any) => {
+            styles.push(
+              new Style({
+                geometry: new Point(coord),
+                image: new CircleStyle({
+                  radius: 4,
+                  fill: new Fill({
+                    color: '#ffffff',
+                  }),
+                  stroke: new Stroke({
+                    color: '#00b3b3',
+                    width: 2,
+                  }),
+                }),
+              })
+            );
+          });
+        }
+        
+        return styles;
+      };const geometryType = drawingTool === 'polygon' ? 'Polygon' : 'Circle';
       const geometryFunction =
         drawingTool === 'rectangle'
           ? (coordinates: any, geometry: any) => {
@@ -231,7 +256,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         type: geometryType as any,
         geometryFunction,
         style: drawingStyle,
-        freehand: drawingTool === 'rectangle',
+        freehand: false, // Изменено на false для рисования кликами
       });
 
       draw.on('drawend', (event) => {
@@ -256,9 +281,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       drawInteractionRef.current = draw;
       snapInteractionRef.current = snap;
-    }, [drawingTool, onFeatureAdded]);
-
-    // Экспонируем функции через ref
+    }, [drawingTool, onFeatureAdded]);    // Экспонируем функции через ref
     useImperativeHandle(
       ref,
       () => ({
@@ -281,6 +304,22 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           if (vectorSourceRef.current) {
             vectorSourceRef.current.clear();
           }
+        },
+        disableDrawingMode: () => {
+          if (!mapInstanceRef.current || !mapRef.current) return;
+          
+          // Удаляем интерактивные элементы рисования
+          if (drawInteractionRef.current) {
+            mapInstanceRef.current.removeInteraction(drawInteractionRef.current);
+            drawInteractionRef.current = null;
+          }
+          if (snapInteractionRef.current) {
+            mapInstanceRef.current.removeInteraction(snapInteractionRef.current);
+            snapInteractionRef.current = null;
+          }
+          
+          // Сбрасываем курсор
+          mapRef.current.style.cursor = '';
         },
       }),
       [],

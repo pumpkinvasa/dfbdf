@@ -35,78 +35,81 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
   const [showTooltips, setShowTooltips] = useState(true);
   const theme = useTheme();
   const drawingButtonRef = useRef<HTMLButtonElement | null>(null);
-  
-  // Список инструментов
+    // Список инструментов
   const tools = [
-    { name: "Нарисовать полигон", icon: <PolylineIcon fontSize="small" /> },
+    { name: "Инструменты AOI", icon: <PolylineIcon fontSize="small" /> },
     { name: "Инструмент 2", icon: <CloseIcon fontSize="small" /> },
     { name: "Инструмент 3", icon: <CloseIcon fontSize="small" /> },
     { name: "Инструмент 4", icon: <CloseIcon fontSize="small" /> },
-  ];
-
-  // Список инструментов рисования
+  ];// Список инструментов рисования
   const drawingTools = [
+    ...(hasFeatures ? [{ name: "Очистить все", icon: <DeleteIcon fontSize="small" />, type: 'clear' as const }] : []),
     { name: "Нарисовать полигон точками", icon: <CreateIcon fontSize="small" />, type: 'polygon' as const },
     { name: "Нарисовать прямоугольник", icon: <CropSquareIcon fontSize="small" />, type: 'rectangle' as const },
     { name: "Загрузить GeoJSON", icon: <CloudUploadIcon fontSize="small" />, type: 'upload' as const },
-    ...(hasFeatures ? [{ name: "Очистить все", icon: <DeleteIcon fontSize="small" />, type: 'clear' as const }] : []),
   ];
-  
-  // Обновляем активный инструмент при изменении внешнего состояния
+    // Обновляем активный инструмент при изменении внешнего состояния
   useEffect(() => {
-    if (activeDrawingTool) {
-      setActiveToolIndex(0);
+    if (activeDrawingTool === 'polygon' || activeDrawingTool === 'rectangle') {
+      setActiveToolIndex(0); // Первый инструмент - инструмент рисования
     } else if (activeToolIndex === 0 && !activeDrawingTool) {
       setActiveToolIndex(null);
     }
-  }, [activeDrawingTool, activeToolIndex]);
-  
-  // Обработчик выбора основного инструмента
+  }, [activeDrawingTool, activeToolIndex]);  // Обработчик выбора основного инструмента
   const handleToolClick = (index: number) => {
     if (index === 0) {
-      if (activeToolIndex === 0 && !drawingMenuOpen) {
+      // Инструмент рисования
+      if (activeToolIndex === 0 && drawingMenuOpen) {
+        // Если уже активен и меню открыто - закрываем меню и деактивируем
+        setDrawingMenuOpen(false);
+        setShowTooltips(true);
         setActiveToolIndex(null);
-        if (onToolSelect) onToolSelect(-1);
-        if (onDrawingToolSelect) onDrawingToolSelect('polygon');
       } else {
-        setDrawingMenuOpen(!drawingMenuOpen);
+        // Активируем кнопку и показываем меню
+        setActiveToolIndex(0);
+        setDrawingMenuOpen(true);
         setShowTooltips(false);
-        if (activeToolIndex !== 0) {
-          setActiveToolIndex(0);
-          if (onToolSelect) onToolSelect(0);
-        }
+        if (onToolSelect) onToolSelect(0);
       }
     } else {
+      // Другие инструменты
       const newIndex = activeToolIndex === index ? null : index;
       setActiveToolIndex(newIndex);
       setDrawingMenuOpen(false);
+      setShowTooltips(true);
+      // Выключаем режим рисования при выборе другого инструмента
+      if (activeDrawingTool && onDrawingToolSelect) {
+        onDrawingToolSelect('polygon'); // Это вызовет переключение в HomePage
+      }
       if (onToolSelect) {
         onToolSelect(newIndex !== null ? newIndex : -1);
       }
     }
-  };
-
-  // Обработчик выбора инструмента рисования
+  };// Обработчик выбора инструмента рисования
   const handleDrawingToolClick = (type: 'polygon' | 'rectangle' | 'upload' | 'clear') => {
     if (type === 'clear') {
       if (onClearAllFeatures) onClearAllFeatures();
-    } else {
-      if (onDrawingToolSelect) onDrawingToolSelect(type);
-    }
-    // Keep menu open for polygon/rectangle, close for upload/clear
-    if (type !== 'upload' && type !== 'clear') {
+      // Оставляем меню открытым после очистки
       setDrawingMenuOpen(true);
     } else {
-      setDrawingMenuOpen(false);
-      setShowTooltips(true);
+      if (onDrawingToolSelect) onDrawingToolSelect(type);
+      // Для polygon/rectangle оставляем меню открытым, для upload - закрываем
+      if (type === 'upload') {
+        setDrawingMenuOpen(false);
+        setShowTooltips(true);
+        setActiveToolIndex(null); // Выключаем активный инструмент после загрузки
+      } else {
+        // Для polygon/rectangle держим меню открытым
+        setDrawingMenuOpen(true);
+      }
     }
-  };
-
-  // Закрыть меню при клике вне него, только если не активно рисование
+  };  // Закрыть меню при клике вне него, но не если активно рисование
   const handleClickAway = () => {
-    if (!activeDrawingTool || activeDrawingTool === 'upload') {
+    if (!activeDrawingTool) {
       setDrawingMenuOpen(false);
       setShowTooltips(true);
+      // Если нет активного режима рисования, снимаем активность кнопки
+      setActiveToolIndex(null);
     }
   };
 
@@ -140,56 +143,60 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
         gap: 1,
         zIndex: 1200,
         border: theme.palette.mode === 'dark' 
-          ? 'none' 
-          : `1px solid ${theme.palette.divider}`,
+          ? 'none'          : `1px solid ${theme.palette.divider}`,
       }}
     >
       {tools.map((tool, index) => (
-        <Tooltip 
-          key={index} 
-          title={tool.name} 
+        <Tooltip
+          key={index}
+          title={tool.name}
           placement="left"
           arrow
-          open={showTooltips && index !== 0 ? undefined : false}
-          disableHoverListener={index === 0 && drawingMenuOpen}
+          disableHoverListener={!showTooltips}
+          disableFocusListener={!showTooltips}
+          disableTouchListener={!showTooltips}
         >
-          <Box>
-            <IconButton
-              ref={index === 0 ? drawingButtonRef : null}
-              size="small"
-              sx={{
-                width: 32,
-                height: 32,
-                minWidth: 32,
-                minHeight: 32,
-                bgcolor: activeToolIndex === index ? theme.palette.primary.main : 'transparent',
-                color: activeToolIndex === index 
-                  ? '#FFF' 
-                  : theme.palette.mode === 'dark' 
-                    ? '#FFFFFF' 
-                    : theme.palette.text.primary,
-                '&:hover': {
-                  bgcolor: activeToolIndex === index 
-                    ? theme.palette.primary.main 
-                    : theme.palette.action.hover,
-                },
-                transition: 'all 0.2s',
-                borderRadius: '8px',
-                padding: 0.5,
-              }}
-              onClick={() => handleToolClick(index)}
-            >
-              {tool.icon}
-            </IconButton>
-          </Box>
+          <IconButton
+            ref={index === 0 ? drawingButtonRef : null}
+            size="small"
+            sx={{
+              width: 32,
+              height: 32,
+              minWidth: 32,
+              minHeight: 32,
+              bgcolor: activeToolIndex === index ? theme.palette.primary.main : 'transparent',
+              color: activeToolIndex === index 
+                ? '#FFF' 
+                : theme.palette.mode === 'dark' 
+                  ? '#FFFFFF' 
+                  : theme.palette.text.primary,
+              '&:hover': {
+                bgcolor: activeToolIndex === index 
+                  ? theme.palette.primary.main 
+                  : theme.palette.action.hover,
+              },
+              transition: 'all 0.2s',
+              borderRadius: '8px',
+              padding: 0.5,
+            }}
+            onClick={() => handleToolClick(index)}
+          >
+            {tool.icon}
+          </IconButton>
         </Tooltip>
-      ))}
-
-      <Popper 
-        open={drawingMenuOpen} 
+      ))}<Popper 
+        open={drawingMenuOpen && drawingButtonRef.current !== null} 
         anchorEl={drawingButtonRef.current}
         placement="left"
         style={{ zIndex: 1300 }}
+        modifiers={[
+          {
+            name: 'offset',
+            options: {
+              offset: [0, 0],
+            },
+          },
+        ]}
       >
         <ClickAwayListener onClickAway={handleClickAway}>
           <Paper 
