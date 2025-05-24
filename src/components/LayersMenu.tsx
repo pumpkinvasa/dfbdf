@@ -17,20 +17,12 @@ import {
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MapIcon from '@mui/icons-material/Map';
 import SatelliteIcon from '@mui/icons-material/Satellite';
-import TerrainIcon from '@mui/icons-material/Terrain';
-import LandscapeIcon from '@mui/icons-material/Landscape';
-import WaterIcon from '@mui/icons-material/Water';
-import PublicIcon from '@mui/icons-material/Public';
 
 export type LayerType = 
   | 'OSM' 
   | 'BingAerial' 
-  | 'BingRoad' 
-  | 'StamenTerrain' 
-  | 'StamenWatercolor' 
-  | 'StamenToner'
-  | 'OpenTopoMap'
-  | 'CartoDB';
+  | 'YandexSatellite'
+  | 'GoogleSatellite';
 
 interface Layer {
   id: LayerType;
@@ -59,48 +51,23 @@ const layerOptions: Layer[] = [
     name: 'OpenStreetMap', 
     icon: <MapIcon />, 
     description: 'Стандартная карта OSM с улицами и зданиями'
-  },
-  { 
+  },  { 
     id: 'BingAerial', 
-    name: 'Спутник Bing', 
+    name: 'Bing (спутник)', 
     icon: <SatelliteIcon />, 
     description: 'Спутниковые снимки от Bing Maps'
   },
   { 
-    id: 'BingRoad', 
-    name: 'Дороги Bing', 
-    icon: <MapIcon />, 
-    description: 'Дорожная карта от Bing Maps'
+    id: 'YandexSatellite', 
+    name: 'Яндекс (спутник)', 
+    icon: <SatelliteIcon />, 
+    description: 'Спутниковые снимки от Яндекс.Карт'
   },
   { 
-    id: 'StamenTerrain', 
-    name: 'Terrain', 
-    icon: <TerrainIcon />, 
-    description: 'Карта рельефа от Stamen'
-  },
-  { 
-    id: 'StamenWatercolor', 
-    name: 'Акварель', 
-    icon: <WaterIcon />, 
-    description: 'Художественная карта в стиле акварели'
-  },
-  { 
-    id: 'StamenToner', 
-    name: 'Toner', 
-    icon: <MapIcon />, 
-    description: 'Высококонтрастная черно-белая карта'
-  },
-  { 
-    id: 'OpenTopoMap', 
-    name: 'Топографическая', 
-    icon: <LandscapeIcon />, 
-    description: 'Топографическая карта с рельефом'
-  },
-  { 
-    id: 'CartoDB', 
-    name: 'CartoDB', 
-    icon: <PublicIcon />, 
-    description: 'Светлая карта от CartoDB'
+    id: 'GoogleSatellite', 
+    name: 'Google (спутник)', 
+    icon: <SatelliteIcon />, 
+    description: 'Спутниковые снимки от Google Maps'
   }
 ];
 

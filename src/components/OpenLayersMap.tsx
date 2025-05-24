@@ -5,6 +5,7 @@ import View from 'ol/View';
 import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
 import XYZ from 'ol/source/XYZ';
+import BingMaps from 'ol/source/BingMaps';
 import { fromLonLat } from 'ol/proj';
 import { Box, useTheme } from '@mui/material';
 import { Attribution, defaults as defaultControls } from 'ol/control';
@@ -31,6 +32,7 @@ interface OpenLayersMapProps {
   drawingTool?: 'polygon' | 'rectangle' | null;
   onFeatureAdded?: (feature: any) => void;
   onFeatureCountChange?: (count: number) => void; // New prop to report feature count
+  currentLayer?: string; // Add currentLayer prop
   overlaySettings?: {
     borders: boolean;
     contour: boolean;
@@ -50,6 +52,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       drawingTool,
       onFeatureAdded,
       onFeatureCountChange,
+      currentLayer = 'OSM', // Default to OSM
       overlaySettings = {
         borders: false,
         contour: false,
@@ -64,13 +67,44 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     const vectorLayerRef = useRef<VectorLayer | null>(null);
     const drawInteractionRef = useRef<Draw | null>(null);
     const snapInteractionRef = useRef<Snap | null>(null);
+    const baseLayerRef = useRef<TileLayer | null>(null); // Add ref for base layer
     const overlayLayersRef = useRef<{
       borders?: TileLayer;
       contour?: TileLayer;
       labels?: TileLayer;
       roads?: TileLayer;
     }>({});
-    const theme = useTheme();
+    const theme = useTheme();    // Создание базовых слоев карты
+    const createBaseLayer = (layerType: string): TileLayer => {
+      switch (layerType) {
+        case 'BingAerial':
+          return new TileLayer({
+            source: new BingMaps({
+              key: 'AuhiCJHlGzhg93IqUH_oCpl_-ZUrIE6SPftlyGYUvr9Amx5nzA-WqGcPquyFZl4L', // Используем публичный ключ для демо
+              imagerySet: 'Aerial', // Спутниковые снимки
+            }),
+          });
+        case 'YandexSatellite':
+          return new TileLayer({
+            source: new XYZ({
+              url: 'https://sat01.maps.yandex.net/tiles?l=sat&v=3.1025.0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+              attributions: '© Яндекс.Карты'
+            }),
+          });
+        case 'GoogleSatellite':
+          return new TileLayer({
+            source: new XYZ({
+              url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+              attributions: '© Google'
+            }),
+          });
+        case 'OSM':
+        default:
+          return new TileLayer({
+            source: new OSM(),
+          });
+      }
+    };
 
     // Создание overlay слоев
     const createOverlayLayers = () => {
@@ -172,6 +206,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       vectorSourceRef.current = vectorSource;
       vectorLayerRef.current = vectorLayer;
 
+      // Создаем базовый слой
+      const baseLayer = createBaseLayer(currentLayer);
+      baseLayerRef.current = baseLayer;
+
       // Создаем overlay слои
       const overlayLayers = createOverlayLayers();
       overlayLayersRef.current = overlayLayers;
@@ -183,9 +221,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       const map = new Map({
         target: mapRef.current,
         layers: [
-          new TileLayer({
-            source: new OSM(),
-          }),
+          baseLayer, // Используем созданный базовый слой
           ...Object.values(overlayLayers), // Добавляем overlay слои
           vectorLayer, // Векторный слой должен быть сверху
         ],
@@ -230,10 +266,24 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       return () => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.setTarget(undefined);
-          mapInstanceRef.current = null;
-        }
+          mapInstanceRef.current = null;        }
       };
-    }, [onFeatureCountChange]);
+    }, [onFeatureCountChange, currentLayer]); // Add currentLayer dependency
+
+    // Обновление базового слоя при изменении currentLayer
+    useEffect(() => {
+      if (mapInstanceRef.current && baseLayerRef.current) {
+        // Удаляем старый базовый слой
+        mapInstanceRef.current.removeLayer(baseLayerRef.current);
+        
+        // Создаем и добавляем новый базовый слой
+        const newBaseLayer = createBaseLayer(currentLayer);
+        baseLayerRef.current = newBaseLayer;
+        
+        // Добавляем новый слой на позицию 0 (внизу)
+        mapInstanceRef.current.getLayers().insertAt(0, newBaseLayer);
+      }
+    }, [currentLayer]);
 
     // Обновление центра и зума
     useEffect(() => {

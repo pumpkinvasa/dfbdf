@@ -217,16 +217,17 @@ const HomePage: React.FC = () => {
             overflow: 'hidden',
             position: 'relative',
           }}
-        >
-          <OpenLayersMap
+        >          <OpenLayersMap
             ref={mapRef}
             initialCenter={[37.6173, 55.7558]}
             initialZoom={10}
             center={mapCenter}
             zoom={mapZoom}
+            currentLayer={currentLayer}
             drawingTool={activeDrawingTool}
             onFeatureAdded={handleFeatureAdded}
             onFeatureCountChange={handleFeatureCountChange}
+            overlaySettings={overlaySettings}
           />
         </Box>        <RightSidebar
           onToolSelect={handleToolSelect}
