@@ -242,11 +242,9 @@ const HomePage: React.FC = () => {
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
         />
-      </Box>
-
-      <Snackbar
+      </Box>      <Snackbar
         open={snackbarOpen}
-        autoHideDuration={5000}
+        autoHideDuration={2000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >

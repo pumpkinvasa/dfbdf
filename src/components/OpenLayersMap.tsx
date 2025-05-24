@@ -282,9 +282,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       const attribution = new Attribution({
         collapsible: false,
-      });
-
-      const map = new Map({
+      });      const map = new Map({
         target: mapRef.current,
         layers: [
           baseLayer, // Используем созданный базовый слой
@@ -298,22 +296,23 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         controls: defaultControls({ attribution: false }).extend([attribution]),
       });
 
-      const modify = new Modify({
-        source: vectorSource,
-        style: new Style({
-          image: new CircleStyle({
-            radius: 6,
-            fill: new Fill({
-              color: '#ffcc33',
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: 2,
-            }),
-          }),
-        }),
-      });
-      map.addInteraction(modify);
+      // Отключаем modify interaction для предотвращения редактирования полигонов
+      // const modify = new Modify({
+      //   source: vectorSource,
+      //   style: new Style({
+      //     image: new CircleStyle({
+      //       radius: 6,
+      //       fill: new Fill({
+      //         color: '#ffcc33',
+      //       }),
+      //       stroke: new Stroke({
+      //         color: '#ffffff',
+      //         width: 2,
+      //       }),
+      //     }),
+      //   }),
+      // });
+      // map.addInteraction(modify);
 
       // Track feature count changes
       vectorSource.on('addfeature', () => {
@@ -486,14 +485,12 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     // Обновление видимости overlay слоев при изменении настроек
     useEffect(() => {
       updateOverlayVisibility();
-    }, [overlaySettings]);
-
-    // Экспонируем функции через ref
+    }, [overlaySettings]);    // Экспонируем функции через ref
     useImperativeHandle(
       ref,
       () => ({
         loadGeoJSON: (geoJSON: any) => {
-          if (!vectorSourceRef.current) return;
+          if (!vectorSourceRef.current || !mapInstanceRef.current) return;
 
           const format = new GeoJSON();
           const features = format.readFeatures(geoJSON, {
@@ -505,7 +502,17 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             feature.setStyle(createVectorStyle());
           });
 
-          vectorSourceRef.current.addFeatures(features);
+          vectorSourceRef.current.addFeatures(features);          // Автоматический переход к загруженным объектам
+          if (features.length > 0) {
+            const extent = vectorSourceRef.current.getExtent();
+            const view = mapInstanceRef.current.getView();
+            
+            // Устанавливаем вид с отступами для лучшего отображения
+            view.fit(extent, {
+              padding: [20, 20, 20, 20],
+              maxZoom: 16, // Максимальный зум для предотвращения чрезмерного приближения
+            });
+          }
         },
         clearAllFeatures: () => {
           if (vectorSourceRef.current) {
