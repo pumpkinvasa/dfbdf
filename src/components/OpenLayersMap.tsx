@@ -4,6 +4,7 @@ import Map from 'ol/Map';
 import View from 'ol/View';
 import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
+import XYZ from 'ol/source/XYZ';
 import { fromLonLat } from 'ol/proj';
 import { Box, useTheme } from '@mui/material';
 import { Attribution, defaults as defaultControls } from 'ol/control';
@@ -12,7 +13,7 @@ import VectorSource from 'ol/source/Vector';
 import { Draw, Modify, Snap } from 'ol/interaction';
 import Polygon from 'ol/geom/Polygon';
 import Point from 'ol/geom/Point';
-import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
+import { Style, Fill, Stroke, Circle as CircleStyle, Text } from 'ol/style';
 import GeoJSON from 'ol/format/GeoJSON';
 
 // Тип для ref
@@ -30,6 +31,12 @@ interface OpenLayersMapProps {
   drawingTool?: 'polygon' | 'rectangle' | null;
   onFeatureAdded?: (feature: any) => void;
   onFeatureCountChange?: (count: number) => void; // New prop to report feature count
+  overlaySettings?: {
+    borders: boolean;
+    contour: boolean;
+    labels: boolean;
+    roads: boolean;
+  };
 }
 
 // Используем forwardRef для передачи ref от родительского компонента
@@ -43,16 +50,74 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       drawingTool,
       onFeatureAdded,
       onFeatureCountChange,
+      overlaySettings = {
+        borders: false,
+        contour: false,
+        labels: true,
+        roads: false
+      },
     },
     ref,
-  ) => {
-    const mapRef = useRef<HTMLDivElement>(null);
+  ) => {    const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<Map | null>(null);
     const vectorSourceRef = useRef<VectorSource | null>(null);
     const vectorLayerRef = useRef<VectorLayer | null>(null);
     const drawInteractionRef = useRef<Draw | null>(null);
     const snapInteractionRef = useRef<Snap | null>(null);
-    const theme = useTheme();    // Стиль для отображения фигур с белыми точками на углах
+    const overlayLayersRef = useRef<{
+      borders?: TileLayer;
+      contour?: TileLayer;
+      labels?: TileLayer;
+      roads?: TileLayer;
+    }>({});
+    const theme = useTheme();
+
+    // Создание overlay слоев
+    const createOverlayLayers = () => {
+      const layers: { [key: string]: TileLayer } = {};
+
+      // Слой границ (используем OpenStreetMap с фильтром для границ)
+      layers.borders = new TileLayer({
+        source: new XYZ({
+          url: 'https://tiles.wmflabs.org/osm-intl/{z}/{x}/{y}.png',
+          attributions: '© OpenStreetMap contributors'
+        }),
+        opacity: 0.7,
+        visible: false
+      });
+
+      // Слой контуров (используем SRTM данные)
+      layers.contour = new TileLayer({
+        source: new XYZ({
+          url: 'https://maps.refuges.info/hiking/{z}/{x}/{y}.png',
+          attributions: '© refuges.info'
+        }),
+        opacity: 0.6,
+        visible: false
+      });
+
+      // Слой подписей (OpenStreetMap labels)
+      layers.labels = new TileLayer({
+        source: new XYZ({
+          url: 'https://stamen-tiles-{a-d}.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png',
+          attributions: '© Stamen Design'
+        }),
+        opacity: 1.0,
+        visible: true // По умолчанию включен
+      });
+
+      // Слой дорог (OpenStreetMap roads)
+      layers.roads = new TileLayer({
+        source: new XYZ({
+          url: 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
+          attributions: '© memomaps.de'
+        }),
+        opacity: 0.8,
+        visible: false
+      });
+
+      return layers;
+    };// Стиль для отображения фигур с белыми точками на углах
     const createVectorStyle = () => {
       const styles = [
         // Основной стиль для фигуры
@@ -94,9 +159,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         
         return styles;
       };
-    };
-
-    // Инициализация карты
+    };    // Инициализация карты
     useEffect(() => {
       if (!mapRef.current || mapInstanceRef.current) return;
 
@@ -109,6 +172,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       vectorSourceRef.current = vectorSource;
       vectorLayerRef.current = vectorLayer;
 
+      // Создаем overlay слои
+      const overlayLayers = createOverlayLayers();
+      overlayLayersRef.current = overlayLayers;
+
       const attribution = new Attribution({
         collapsible: false,
       });
@@ -119,7 +186,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           new TileLayer({
             source: new OSM(),
           }),
-          vectorLayer,
+          ...Object.values(overlayLayers), // Добавляем overlay слои
+          vectorLayer, // Векторный слой должен быть сверху
         ],
         view: new View({
           center: fromLonLat(initialCenter),
