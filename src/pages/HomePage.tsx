@@ -241,8 +241,6 @@ const HomePage: React.FC = () => {
           onClose={handleLayersMenuClose}
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
-          overlaySettings={overlaySettings}
-          onOverlayChange={handleOverlayChange}
         />
       </Box>
 

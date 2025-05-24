@@ -74,7 +74,21 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       labels?: TileLayer;
       roads?: TileLayer;
     }>({});
-    const theme = useTheme();    // Создание базовых слоев карты
+    const theme = useTheme();
+
+    // Функция для обновления видимости overlay слоев
+    const updateOverlayVisibility = () => {
+      if (!overlayLayersRef.current) return;
+      
+      Object.entries(overlaySettings).forEach(([key, visible]) => {
+        const layer = overlayLayersRef.current[key as keyof typeof overlayLayersRef.current];
+        if (layer) {
+          layer.setVisible(visible);
+        }
+      });
+    };
+
+    // Создание базовых слоев карты
     const createBaseLayer = (layerType: string): TileLayer => {
       switch (layerType) {
         case 'BingAerial':
@@ -104,10 +118,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             source: new OSM(),
           });
       }
-    };
-
-    // Создание overlay слоев
-    const createOverlayLayers = () => {
+    };    // Создание overlay слоев
+    const createOverlayLayers = (layerType: string) => {
       const layers: { [key: string]: TileLayer } = {};
 
       // Слой границ (используем OpenStreetMap с фильтром для границ)
@@ -140,15 +152,50 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         visible: true // По умолчанию включен
       });
 
-      // Слой дорог (OpenStreetMap roads)
-      layers.roads = new TileLayer({
-        source: new XYZ({
-          url: 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
-          attributions: '© memomaps.de'
-        }),
-        opacity: 0.8,
-        visible: false
-      });
+      // Слой дорог - разные источники в зависимости от базового слоя
+      const createRoadLayer = () => {
+        switch (layerType) {          case 'BingAerial':
+            return new TileLayer({
+              source: new XYZ({
+                url: 'https://ecn.t0.tiles.virtualearth.net/tiles/h{quadkey}.jpeg?g=1',
+                attributions: '© Microsoft Bing Maps'
+              }),
+              opacity: 0.8,
+              visible: false
+            });
+          case 'YandexSatellite':
+            return new TileLayer({
+              source: new XYZ({
+                url: 'https://vec01.maps.yandex.net/tiles?l=skl&v=20.06.03-0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+                attributions: '© Яндекс.Карты'
+              }),
+              opacity: 0.8,
+              visible: false
+            });
+          case 'GoogleSatellite':
+            return new TileLayer({
+              source: new XYZ({
+                url: 'https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
+                attributions: '© Google'
+              }),
+              opacity: 0.8,
+              visible: false
+            });
+          case 'OSM':
+          default:
+            // Для OSM слой дорог не нужен, так как они уже встроены
+            return new TileLayer({
+              source: new XYZ({
+                url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', // Прозрачный пиксель
+                attributions: ''
+              }),
+              opacity: 0,
+              visible: false
+            });
+        }
+      };
+
+      layers.roads = createRoadLayer();
 
       return layers;
     };// Стиль для отображения фигур с белыми точками на углах
@@ -208,10 +255,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       // Создаем базовый слой
       const baseLayer = createBaseLayer(currentLayer);
-      baseLayerRef.current = baseLayer;
-
-      // Создаем overlay слои
-      const overlayLayers = createOverlayLayers();
+      baseLayerRef.current = baseLayer;      // Создаем overlay слои
+      const overlayLayers = createOverlayLayers(currentLayer);
       overlayLayersRef.current = overlayLayers;
 
       const attribution = new Attribution({
@@ -268,20 +313,39 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           mapInstanceRef.current.setTarget(undefined);
           mapInstanceRef.current = null;        }
       };
-    }, [onFeatureCountChange, currentLayer]); // Add currentLayer dependency
-
-    // Обновление базового слоя при изменении currentLayer
+    }, [onFeatureCountChange, currentLayer]); // Add currentLayer dependency    // Обновление базового слоя при изменении currentLayer
     useEffect(() => {
       if (mapInstanceRef.current && baseLayerRef.current) {
         // Удаляем старый базовый слой
         mapInstanceRef.current.removeLayer(baseLayerRef.current);
         
+        // Удаляем старые overlay слои
+        Object.values(overlayLayersRef.current).forEach(layer => {
+          if (layer) {
+            mapInstanceRef.current?.removeLayer(layer);
+          }
+        });
+        
         // Создаем и добавляем новый базовый слой
         const newBaseLayer = createBaseLayer(currentLayer);
         baseLayerRef.current = newBaseLayer;
         
-        // Добавляем новый слой на позицию 0 (внизу)
+        // Создаем новые overlay слои с учетом нового базового слоя
+        const newOverlayLayers = createOverlayLayers(currentLayer);
+        overlayLayersRef.current = newOverlayLayers;
+        
+        // Добавляем новый базовый слой на позицию 0 (внизу)
         mapInstanceRef.current.getLayers().insertAt(0, newBaseLayer);
+        
+        // Добавляем новые overlay слои
+        const layers = mapInstanceRef.current.getLayers();
+        const vectorLayerIndex = layers.getLength() - 1; // Векторный слой должен быть последним
+        Object.values(newOverlayLayers).forEach((layer, index) => {
+          layers.insertAt(vectorLayerIndex + index, layer);
+        });
+        
+        // Применяем текущие настройки overlay
+        updateOverlayVisibility();
       }
     }, [currentLayer]);
 
@@ -395,11 +459,15 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       const snap = new Snap({
         source: vectorSourceRef.current,
       });
-      mapInstanceRef.current.addInteraction(snap);
+      mapInstanceRef.current.addInteraction(snap);      drawInteractionRef.current = draw;
+      snapInteractionRef.current = snap;    }, [drawingTool, onFeatureAdded]);
 
-      drawInteractionRef.current = draw;
-      snapInteractionRef.current = snap;
-    }, [drawingTool, onFeatureAdded]);    // Экспонируем функции через ref
+    // Обновление видимости overlay слоев при изменении настроек
+    useEffect(() => {
+      updateOverlayVisibility();
+    }, [overlaySettings]);
+
+    // Экспонируем функции через ref
     useImperativeHandle(
       ref,
       () => ({
