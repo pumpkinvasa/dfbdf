@@ -138,7 +138,14 @@ const HomePage: React.FC = () => {
 
   const handleLayersMenuClose = useCallback(() => {
     setLayersMenuOpen(false);
-  }, []);
+    // Отключаем режим рисования при закрытии меню слоев
+    if (activeDrawingTool) {
+      setActiveDrawingTool(null);
+      if (mapRef.current && mapRef.current.disableDrawingMode) {
+        mapRef.current.disableDrawingMode();
+      }
+    }
+  }, [activeDrawingTool]);
   const handleLayerSelect = useCallback((layerId: LayerType) => {
     setCurrentLayer(layerId);
     setSnackbarMessage(`Выбран слой: ${layerId}`);
@@ -199,7 +206,10 @@ const HomePage: React.FC = () => {
           overflow: 'hidden',
         }}
       >
-        <LeftSidebar onLayersClick={handleLayersClick} />
+        <LeftSidebar 
+          onLayersClick={handleLayersClick} 
+          layersMenuOpen={layersMenuOpen} 
+        />
         <Box
           sx={{
             flexGrow: 1,

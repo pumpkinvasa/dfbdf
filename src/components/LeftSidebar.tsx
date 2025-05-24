@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Drawer,
@@ -22,11 +22,18 @@ interface TabContent {
 
 interface LeftSidebarProps {
   onLayersClick?: () => void;
+  layersMenuOpen?: boolean;
 }
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick }) => {
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick, layersMenuOpen }) => {
   const [selectedTab, setSelectedTab] = useState(0);
   const theme = useTheme();
+  // Сбрасываем выделение кнопки слоев при закрытии меню
+  useEffect(() => {
+    if (!layersMenuOpen && selectedTab === 1) {
+      setSelectedTab(0); // Возвращаемся к первой вкладке (панель управления)
+    }
+  }, [layersMenuOpen, selectedTab]);
     const tabs: TabContent[] = [
     {
       title: 'Панель управления',

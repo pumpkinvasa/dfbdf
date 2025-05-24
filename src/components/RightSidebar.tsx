@@ -50,15 +50,19 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     { name: "Нарисовать прямоугольник", icon: <CropSquareIcon fontSize="small" />, type: 'rectangle' as const },
     { name: "Загрузить GeoJSON", icon: <CloudUploadIcon fontSize="small" />, type: 'upload' as const },
   ];
-  
-  // Обновляем активный инструмент при изменении внешнего состояния
+    // Обновляем активный инструмент при изменении внешнего состояния
   useEffect(() => {
     if (activeDrawingTool === 'polygon' || activeDrawingTool === 'rectangle') {
       setActiveToolIndex(0); // Первый инструмент - инструмент рисования
-    } else if (activeToolIndex === 0 && !activeDrawingTool) {
-      setActiveToolIndex(null);
+      setDrawingMenuOpen(true); // Открываем меню когда активен режим рисования
+    } else if (!activeDrawingTool) {
+      // Когда режим рисования отключается, сбрасываем состояние
+      if (activeToolIndex === 0) {
+        setActiveToolIndex(null);
+      }
+      setDrawingMenuOpen(false);
     }
-  }, [activeDrawingTool, activeToolIndex]);
+  }, [activeDrawingTool]);
   
   // Обработчик выбора основного инструмента
   const handleToolClick = (index: number) => {
