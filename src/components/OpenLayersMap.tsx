@@ -16,6 +16,8 @@ import Polygon from 'ol/geom/Polygon';
 import Point from 'ol/geom/Point';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text } from 'ol/style';
 import GeoJSON from 'ol/format/GeoJSON';
+import { getArea } from 'ol/sphere';
+import { Coordinate } from 'ol/coordinate';
 
 // Тип для ref
 export interface OpenLayersMapHandle {
@@ -200,395 +202,462 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-                attributions: '© Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, and the GIS User Community'
-              }),
-              opacity: 0.8,
-              visible: false
-            });
-          case 'ESRIStreet':
-          case 'OSM':
-          default:
-            return new TileLayer({
-              source: new XYZ({
-                url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-                attributions: ''
-              }),
-              opacity: 0,
-              visible: false
-            });
-        }
-      };
-
-      layers.roads = createRoadLayer();
-
-      return layers;
-    };
-
-    // Стиль для отображения фигур с белыми точками на углах
-    const createVectorStyle = () => {
-      const styles = [
-        new Style({
-          fill: new Fill({
-            color: 'rgba(0, 179, 179, 0.2)',
-          }),
-          stroke: new Stroke({
-            color: '#00b3b3',
-            width: 2,
-          }),
-        }),
-      ];
-
-      return (feature: any) => {
-        const geometry = feature.getGeometry();
-        
-        if (geometry instanceof Polygon) {
-          const coordinates = geometry.getCoordinates()[0];
-          coordinates.slice(0, -1).forEach((coord: any) => {
-            styles.push(
-              new Style({
-                geometry: new Point(coord),
-                image: new CircleStyle({
-                  radius: 4,
-                  fill: new Fill({
-                    color: '#ffffff',
-                  }),
-                  stroke: new Stroke({
-                    color: '#00b3b3',
-                    width: 2,
-                  }),
-                }),
-              })
-            );
-          });
-        }
-        
-        return styles;
-      };
-    };
-
-    // Инициализация карты
-    useEffect(() => {
-      if (!mapRef.current || mapInstanceRef.current) return;
-
-      const vectorSource = new VectorSource();
-      const vectorLayer = new VectorLayer({
-        source: vectorSource,
-        style: createVectorStyle(),
-      });
-
-      vectorSourceRef.current = vectorSource;
-      vectorLayerRef.current = vectorLayer;
-
-      const baseLayer = createBaseLayer(currentLayer);
-      baseLayerRef.current = baseLayer;
-
-      const overlayLayers = createOverlayLayers(currentLayer);
-      overlayLayersRef.current = overlayLayers;
-
-      const attribution = new Attribution({
-        collapsible: false,
-      });
-
-      const map = new Map({
-        target: mapRef.current,
-        layers: [
-          baseLayer,
-          ...Object.values(overlayLayers),
-          vectorLayer,
-        ],
-        view: new View({
-          center: fromLonLat(initialCenter),
-          zoom: initialZoom,
-        }),
-        controls: defaultControls({ attribution: false }).extend([attribution]),
-      });
-
-      vectorSource.on('addfeature', () => {
-        if (onFeatureCountChange) {
-          onFeatureCountChange(vectorSource.getFeatures().length);
-        }
-      });
-      vectorSource.on('removefeature', () => {
-        if (onFeatureCountChange) {
-          onFeatureCountChange(vectorSource.getFeatures().length);
-        }
-      });
-
-      mapInstanceRef.current = map;
-
-      map.getView().on('change:center', () => {
-        currentCenterRef.current = toLonLat(map.getView().getCenter() as [number, number]) as [number, number];
-      });
-      
-      map.getView().on('change:resolution', () => {
-        currentZoomRef.current = map.getView().getZoom() || initialZoom;
-      });
-
-      return () => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setTarget(undefined);
-          mapInstanceRef.current = null;
-        }
-      };
-    }, [onFeatureCountChange, currentLayer]);
-
-    // Обновление базового слоя при изменении currentLayer
-    useEffect(() => {
-      if (mapInstanceRef.current && baseLayerRef.current) {
-        // Сохраняем текущий центр и зум перед обновлением слоев
-        const currentCenter = currentCenterRef.current;
-        const currentZoom = currentZoomRef.current;
-
-        // Удаляем старый базовый слой
-        mapInstanceRef.current.removeLayer(baseLayerRef.current);
-        
-        // Удаляем старые overlay слои
-        Object.values(overlayLayersRef.current).forEach(layer => {
-          if (layer) {
-            mapInstanceRef.current?.removeLayer(layer);
-          }
-        });
-        
-        // Создаем и добавляем новый базовый слой
-        const newBaseLayer = createBaseLayer(currentLayer);
-        baseLayerRef.current = newBaseLayer;
-        
-        // Создаем новые overlay слои
-        const newOverlayLayers = createOverlayLayers(currentLayer);
-        overlayLayersRef.current = newOverlayLayers;
-        
-        // Добавляем новый базовый слой на позицию 0
-        mapInstanceRef.current.getLayers().insertAt(0, newBaseLayer);
-        
-        // Добавляем новые overlay слои
-        const layers = mapInstanceRef.current.getLayers();
-        const vectorLayerIndex = layers.getLength() - 1;
-        Object.values(newOverlayLayers).forEach((layer, index) => {
-          layers.insertAt(vectorLayerIndex + index, layer);
-        });
-        
-        // Восстанавливаем текущий центр и зум
-        const view = mapInstanceRef.current.getView();
-        view.setCenter(fromLonLat(currentCenter));
-        view.setZoom(currentZoom);
-        
-        // Применяем текущие настройки overlay
-        updateOverlayVisibility();
-      }
-    }, [currentLayer]);
-
-    // Обновление центра и зума
-    useEffect(() => {
-      if (mapInstanceRef.current && center && zoom !== undefined) {
-        const view = mapInstanceRef.current.getView();
-        view.setCenter(fromLonLat(center));
-        view.setZoom(zoom);
-      }
-    }, [center, zoom]);
-
-    // Управление взаимодействиями рисования
-    useEffect(() => {
-      if (!mapInstanceRef.current || !vectorSourceRef.current || !mapRef.current) return;
-
-      if (drawInteractionRef.current) {
-        mapInstanceRef.current.removeInteraction(drawInteractionRef.current);
-        drawInteractionRef.current = null;
-      }
-      if (snapInteractionRef.current) {
-        mapInstanceRef.current.removeInteraction(snapInteractionRef.current);
-        snapInteractionRef.current = null;
-      }
-
-      if (!drawingTool) {
-        mapRef.current.style.cursor = '';
-        return;
-      }
-
-      mapRef.current.style.cursor = 'crosshair';
-
-      const drawingStyle = (feature: any) => {
-        const styles = [
-          new Style({
-            fill: new Fill({
-              color: 'rgba(0, 179, 179, 0.2)',
+              attributions: '© Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, and the GIS User Community'
             }),
+            opacity: 0.8,
+            visible: false
+          });
+        case 'ESRIStreet':
+        case 'OSM':
+        default:
+          return new TileLayer({
+            source: new XYZ({
+              url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+              attributions: ''
+            }),
+            opacity: 0,
+            visible: false
+          });
+      }
+    };
+
+    layers.roads = createRoadLayer();
+
+    return layers;
+  };
+
+  // Стиль для отображения фигур с белыми точками на углах и меткой площади
+  const createVectorStyle = () => {
+    return (feature: any) => {
+      const styles: Style[] = [];
+      const geometry = feature.getGeometry();
+
+      if (geometry instanceof Polygon) {
+        // Основной стиль для фигуры (без заливки, только грани)
+        styles.push(
+          new Style({
             stroke: new Stroke({
               color: '#00b3b3',
               width: 2,
-              lineDash: drawingTool === 'polygon' ? [5, 5] : undefined,
             }),
-          }),
-        ];
+          })
+        );
 
-        const geometry = feature.getGeometry();
-        
-        if (geometry instanceof Polygon) {
-          const coordinates = geometry.getCoordinates()[0];
-          coordinates.slice(0, -1).forEach((coord: any) => {
-            styles.push(
-              new Style({
-                geometry: new Point(coord),
-                image: new CircleStyle({
-                  radius: 4,
-                  fill: new Fill({
-                    color: '#ffffff',
-                  }),
-                  stroke: new Stroke({
-                    color: '#00b3b3',
-                    width: 2,
-                  }),
+        // Добавляем белые точки на углах
+        const coordinates = geometry.getCoordinates()[0] as Coordinate[];
+        coordinates.slice(0, -1).forEach((coord: Coordinate) => {
+          styles.push(
+            new Style({
+              geometry: new Point(coord),
+              image: new CircleStyle({
+                radius: 4,
+                fill: new Fill({
+                  color: '#ffffff',
                 }),
-              })
-            );
-          });
-        }
-        
-        return styles;
-      };
+                stroke: new Stroke({
+                  color: '#00b3b3',
+                  width: 2,
+                }),
+              }),
+            })
+          );
+        });
 
-      const geometryType = drawingTool === 'polygon' ? 'Polygon' : 'Circle';
-      const geometryFunction =
-        drawingTool === 'rectangle'
-          ? (coordinates: any, geometry: any) => {
-              if (!geometry) {
-                geometry = new Polygon([]);
-              }
-              const start = coordinates[0];
-              const end = coordinates[1];
-              geometry.setCoordinates([
-                [start, [start[0], end[1]], end, [end[0], start[1]], start],
-              ]);
-              return geometry;
-            }
-          : undefined;
+        // Вычисляем площадь в квадратных километрах
+        const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
+        const areaKm2 = (areaM2 / 1_000_000).toFixed(2); // Конвертируем в км² и округляем до 2 знаков
 
-      const draw = new Draw({
-        source: vectorSourceRef.current,
-        type: geometryType as any,
-        geometryFunction,
-        style: drawingStyle,
-        freehand: false,
-      });
+        // Находим верхнюю грань (наименьший Y, самый верхний в проекции EPSG:3857)
+      const topPoint = coordinates.slice(0, -1).reduce((top: Coordinate, coord: Coordinate) => {
+        return coord[1] > top[1] ? coord : top;
+      }, coordinates[0]);
 
-      draw.on('drawend', (event) => {
-        const feature = event.feature;
-        feature.setStyle(createVectorStyle());
+      // Находим левую точку среди координат верхней грани
+      const leftTopPoint = coordinates.slice(0, -1)
+        .filter((coord: Coordinate) => Array.isArray(coord) && coord.length >= 2 && Math.abs(coord[1] - topPoint[1]) < 0.0001)
+        .reduce((left: Coordinate, coord: Coordinate) => {
+          return coord[0] < left[0] ? coord : left;
+        }, topPoint);
 
-        if (onFeatureAdded) {
-          const format = new GeoJSON();
-          const geoJSON = format.writeFeatureObject(feature, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857',
-          });
-          onFeatureAdded(geoJSON);
-        }
-      });
-
-      mapInstanceRef.current.addInteraction(draw);
-      const snap = new Snap({
-        source: vectorSourceRef.current,
-      });
-      mapInstanceRef.current.addInteraction(snap);
-
-      drawInteractionRef.current = draw;
-      snapInteractionRef.current = snap;
-    }, [drawingTool, onFeatureAdded]);
-
-    // Обновление видимости overlay слоев
-    useEffect(() => {
-      updateOverlayVisibility();
-    }, [overlaySettings]);
-
-    // Экспонируем функции через ref
-    useImperativeHandle(
-      ref,
-      () => ({
-        loadGeoJSON: (geoJSON: any) => {
-          if (!vectorSourceRef.current || !mapInstanceRef.current) return;
-
-          const format = new GeoJSON();
-          const features = format.readFeatures(geoJSON, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857',
-          });
-
-          features.forEach((feature) => {
-            feature.setStyle(createVectorStyle());
-          });
-
-          vectorSourceRef.current.addFeatures(features);
-
-          if (features.length > 0) {
-            const extent = vectorSourceRef.current.getExtent();
-            const view = mapInstanceRef.current.getView();
-            
-            view.fit(extent, {
-              padding: [20, 20, 20, 20],
-              maxZoom: 16,
-            });
-          }
-        },
-        clearAllFeatures: () => {
-          if (vectorSourceRef.current) {
-            vectorSourceRef.current.clear();
-          }
-        },
-        disableDrawingMode: () => {
-          if (!mapInstanceRef.current || !mapRef.current) return;
-          
-          if (drawInteractionRef.current) {
-            mapInstanceRef.current.removeInteraction(drawInteractionRef.current);
-            drawInteractionRef.current = null;
-          }
-          if (snapInteractionRef.current) {
-            mapInstanceRef.current.removeInteraction(snapInteractionRef.current);
-            snapInteractionRef.current = null;
-          }
-          
-          mapRef.current.style.cursor = '';
-        },
-      }),
-      [],
-    );
-
-    // Обновление размера карты
-    useEffect(() => {
-      const updateMapSize = () => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.updateSize();
-        }
-      };
-
-      const resizeObserver = new ResizeObserver(updateMapSize);
-      if (mapRef.current) {
-        resizeObserver.observe(mapRef.current);
+        // Добавляем метку с площадью над верхней гранью, ближе к левому краю
+        styles.push(
+          new Style({
+            geometry: new Point(leftTopPoint),
+            text: new Text({
+              text: `${areaKm2} км²`,
+              font: '12px Arial',
+              fill: new Fill({ color: '#ffffff' }),
+              backgroundFill: new Fill({ color: '#000000' }),
+              padding: [2, 2, 2, 2],
+              offsetY: -15, // Смещение вверх
+              offsetX: 10, // Небольшое смещение вправо от левого края
+              textAlign: 'left',
+              overflow: true,
+            }),
+          })
+        );
       }
 
-      return () => {
-        resizeObserver.disconnect();
-      };
-    }, []);
+      return styles;
+    };
+  };
 
-    return (
-      <Box
-        ref={mapRef}
-        sx={{
-          width: '100%',
-          height: '100%',
-          '& .ol-zoom': {
-            top: 'auto',
-            left: 'auto',
-            bottom: '1rem',
-            right: '1rem',
-          },
-          '& .ol-attribution': {
-            background: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)',
-          },
-        }}
-      />
-    );
-  },
-);
+  // Инициализация карты
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    const vectorSource = new VectorSource();
+    const vectorLayer = new VectorLayer({
+      source: vectorSource,
+      style: createVectorStyle(),
+    });
+
+    vectorSourceRef.current = vectorSource;
+    vectorLayerRef.current = vectorLayer;
+
+    const baseLayer = createBaseLayer(currentLayer);
+    baseLayerRef.current = baseLayer;
+
+    const overlayLayers = createOverlayLayers(currentLayer);
+    overlayLayersRef.current = overlayLayers;
+
+    const attribution = new Attribution({
+      collapsible: false,
+    });
+
+    const map = new Map({
+      target: mapRef.current,
+      layers: [
+        baseLayer,
+        ...Object.values(overlayLayers),
+        vectorLayer,
+      ],
+      view: new View({
+        center: fromLonLat(initialCenter),
+        zoom: initialZoom,
+      }),
+      controls: defaultControls({ attribution: false }).extend([attribution]),
+    });
+
+    vectorSource.on('addfeature', () => {
+      if (onFeatureCountChange) {
+        onFeatureCountChange(vectorSource.getFeatures().length);
+      }
+    });
+    vectorSource.on('removefeature', () => {
+      if (onFeatureCountChange) {
+        onFeatureCountChange(vectorSource.getFeatures().length);
+      }
+    });
+
+    mapInstanceRef.current = map;
+
+    map.getView().on('change:center', () => {
+      currentCenterRef.current = toLonLat(map.getView().getCenter() as [number, number]) as [number, number];
+    });
+
+    map.getView().on('change:resolution', () => {
+      currentZoomRef.current = map.getView().getZoom() || initialZoom;
+    });
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.setTarget(undefined);
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [onFeatureCountChange, currentLayer]);
+
+  // Обновление базового слоя при изменении currentLayer
+  useEffect(() => {
+    if (mapInstanceRef.current && baseLayerRef.current) {
+      // Сохраняем текущий центр и зум перед обновлением слоев
+      const currentCenter = currentCenterRef.current;
+      const currentZoom = currentZoomRef.current;
+
+      // Удаляем старый базовый слой
+      mapInstanceRef.current.removeLayer(baseLayerRef.current);
+
+      // Удаляем старые overlay слои
+      Object.values(overlayLayersRef.current).forEach(layer => {
+        if (layer) {
+          mapInstanceRef.current?.removeLayer(layer);
+        }
+      });
+
+      // Создаем и добавляем новый базовый слой
+      const newBaseLayer = createBaseLayer(currentLayer);
+      baseLayerRef.current = newBaseLayer;
+
+      // Создаем новые overlay слои
+      const newOverlayLayers = createOverlayLayers(currentLayer);
+      overlayLayersRef.current = newOverlayLayers;
+
+      // Добавляем новый базовый слой на позицию 0
+      mapInstanceRef.current.getLayers().insertAt(0, newBaseLayer);
+
+      // Добавляем новые overlay слои
+      const layers = mapInstanceRef.current.getLayers();
+      const vectorLayerIndex = layers.getLength() - 1;
+      Object.values(newOverlayLayers).forEach((layer, index) => {
+        layers.insertAt(vectorLayerIndex + index, layer);
+      });
+
+      // Восстанавливаем текущий центр и зум
+      const view = mapInstanceRef.current.getView();
+      view.setCenter(fromLonLat(currentCenter));
+      view.setZoom(currentZoom);
+
+      // Применяем текущие настройки overlay
+      updateOverlayVisibility();
+    }
+  }, [currentLayer]);
+
+  // Обновление центра и зума
+  useEffect(() => {
+    if (mapInstanceRef.current && center && zoom !== undefined) {
+      const view = mapInstanceRef.current.getView();
+      view.setCenter(fromLonLat(center));
+      view.setZoom(zoom);
+    }
+  }, [center, zoom]);
+
+  // Управление взаимодействиями рисования
+  useEffect(() => {
+    if (!mapInstanceRef.current || !vectorSourceRef.current || !mapRef.current) return;
+
+    if (drawInteractionRef.current) {
+      mapInstanceRef.current.removeInteraction(drawInteractionRef.current);
+      drawInteractionRef.current = null;
+    }
+    if (snapInteractionRef.current) {
+      mapInstanceRef.current.removeInteraction(snapInteractionRef.current);
+      snapInteractionRef.current = null;
+    }
+
+    if (!drawingTool) {
+      mapRef.current.style.cursor = '';
+      return;
+    }
+
+    mapRef.current.style.cursor = 'crosshair';
+
+  const drawingStyle = (feature: any) => {
+    const styles: Style[] = [];
+    const geometry = feature.getGeometry();
+
+    if (geometry instanceof Polygon) {
+      // Основной стиль для фигуры во время рисования (без заливки)
+      styles.push(
+        new Style({
+          stroke: new Stroke({
+            color: '#00b3b3',
+            width: 2,
+            lineDash: drawingTool === 'polygon' ? [5, 5] : undefined,
+          }),
+        })
+      );
+
+      // Добавляем белые точки на углах
+      const coordinates = geometry.getCoordinates()[0] as Coordinate[];
+      coordinates.slice(0, -1).forEach((coord: Coordinate) => {
+        styles.push(
+          new Style({
+            geometry: new Point(coord),
+            image: new CircleStyle({
+              radius: 4,
+              fill: new Fill({
+                color: '#ffffff',
+              }),
+              stroke: new Stroke({
+                color: '#00b3b3',
+                width: 2,
+              }),
+            }),
+          })
+        );
+      });
+
+      // Вычисляем площадь в квадратных километрах
+      const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
+      const areaKm2 = (areaM2 / 1_000_000).toFixed(2);
+
+      // Находим верхнюю грань (наибольший Y, самый верхний в проекции EPSG:3857)
+      const topPoint = coordinates.slice(0, -1).reduce((top: Coordinate, coord: Coordinate) => {
+        return coord[1] > top[1] ? coord : top;
+      }, coordinates[0]);
+
+      // Находим левую точку среди координат верхней грани
+      const leftTopPoint = coordinates.slice(0, -1)
+        .filter((coord: Coordinate) => Array.isArray(coord) && coord.length >= 2 && Math.abs(coord[1] - topPoint[1]) < 0.0001)
+        .reduce((left: Coordinate, coord: Coordinate) => {
+          return coord[0] < left[0] ? coord : left;
+        }, topPoint);
+
+      // Добавляем метку с площадью
+      styles.push(
+        new Style({
+          geometry: new Point(leftTopPoint),
+          text: new Text({
+            text: `${areaKm2} км²`,
+            font: '12px Arial',
+            fill: new Fill({ color: '#ffffff' }),
+            backgroundFill: new Fill({ color: '#000000' }),
+            padding: [2, 2, 2, 2],
+            offsetY: -15, // Смещение вверх
+            offsetX: 10, // Небольшое смещение вправо от левого края
+            textAlign: 'left',
+            overflow: true,
+          }),
+        })
+      );
+    }
+
+    return styles;
+  };
+
+    const geometryType = drawingTool === 'polygon' ? 'Polygon' : 'Circle';
+    const geometryFunction =
+      drawingTool === 'rectangle'
+        ? (coordinates: any, geometry: any) => {
+            if (!geometry) {
+              geometry = new Polygon([]);
+            }
+            const start = coordinates[0];
+            const end = coordinates[1];
+            geometry.setCoordinates([
+              [start, [start[0], end[1]], end, [end[0], start[1]], start],
+            ]);
+            return geometry;
+          }
+        : undefined;
+
+    const draw = new Draw({
+      source: vectorSourceRef.current,
+      type: geometryType as any,
+      geometryFunction,
+      style: drawingStyle,
+      freehand: false,
+    });
+
+    draw.on('drawend', (event) => {
+      const feature = event.feature;
+      feature.setStyle(createVectorStyle());
+
+      if (onFeatureAdded) {
+        const format = new GeoJSON();
+        const geoJSON = format.writeFeatureObject(feature, {
+          dataProjection: 'EPSG:4326',
+          featureProjection: 'EPSG:3857',
+        });
+        onFeatureAdded(geoJSON);
+      }
+    });
+
+    mapInstanceRef.current.addInteraction(draw);
+    const snap = new Snap({
+      source: vectorSourceRef.current,
+    });
+    mapInstanceRef.current.addInteraction(snap);
+
+    drawInteractionRef.current = draw;
+    snapInteractionRef.current = snap;
+  }, [drawingTool, onFeatureAdded]);
+
+  // Обновление видимости overlay слоев
+  useEffect(() => {
+    updateOverlayVisibility();
+  }, [overlaySettings]);
+
+  // Экспонируем функции через ref
+  useImperativeHandle(
+    ref,
+    () => ({
+      loadGeoJSON: (geoJSON: any) => {
+        if (!vectorSourceRef.current || !mapInstanceRef.current) return;
+
+        const format = new GeoJSON();
+        const features = format.readFeatures(geoJSON, {
+          dataProjection: 'EPSG:4326',
+          featureProjection: 'EPSG:3857',
+        });
+
+        features.forEach((feature) => {
+          feature.setStyle(createVectorStyle());
+        });
+
+        vectorSourceRef.current.addFeatures(features);
+
+        if (features.length > 0) {
+          const extent = vectorSourceRef.current.getExtent();
+          const view = mapInstanceRef.current.getView();
+
+          view.fit(extent, {
+            padding: [20, 20, 20, 20],
+            maxZoom: 16,
+          });
+        }
+      },
+      clearAllFeatures: () => {
+        if (vectorSourceRef.current) {
+          vectorSourceRef.current.clear();
+        }
+      },
+      disableDrawingMode: () => {
+        if (!mapInstanceRef.current || !mapRef.current) return;
+
+        if (drawInteractionRef.current) {
+          mapInstanceRef.current.removeInteraction(drawInteractionRef.current);
+          drawInteractionRef.current = null;
+        }
+        if (snapInteractionRef.current) {
+          mapInstanceRef.current.removeInteraction(snapInteractionRef.current);
+          snapInteractionRef.current = null;
+        }
+
+        mapRef.current.style.cursor = '';
+      },
+    }),
+    [],
+  );
+
+  // Обновление размера карты
+  useEffect(() => {
+    const updateMapSize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.updateSize();
+      }
+    };
+
+    const resizeObserver = new ResizeObserver(updateMapSize);
+    if (mapRef.current) {
+      resizeObserver.observe(mapRef.current);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  return (
+    <Box
+      ref={mapRef}
+      sx={{
+        width: '100%',
+        height: '100%',
+        '& .ol-zoom': {
+          top: 'auto',
+          left: 'auto',
+          bottom: '1rem',
+          right: '1rem',
+        },
+        '& .ol-attribution': {
+          background: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)',
+        },
+      }}
+    />
+  );
+});
 
 OpenLayersMap.displayName = 'OpenLayersMap';
 export default React.memo(OpenLayersMap);
