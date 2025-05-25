@@ -420,11 +420,13 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       if (onFeatureCountChange) {
         onFeatureCountChange(vectorSource.getFeatures().length);
       }
-    });
-    vectorSource.on('removefeature', () => {
+    });    vectorSource.on('removefeature', () => {
       if (onFeatureCountChange) {
         onFeatureCountChange(vectorSource.getFeatures().length);
       }
+      
+      // Удаляем изображение при удалении полигона
+      clearImageLayer();
     });
 
     mapInstanceRef.current = map;
