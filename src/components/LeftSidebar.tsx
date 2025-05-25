@@ -13,6 +13,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import LayersIcon from '@mui/icons-material/Layers';
+import TimelineIcon from '@mui/icons-material/Timeline';
 
 interface TabContent {
   title: string;
@@ -22,19 +23,31 @@ interface TabContent {
 
 interface LeftSidebarProps {
   onLayersClick?: () => void;
+  onCompositesClick?: () => void;
   layersMenuOpen?: boolean;
+  compositesMenuOpen?: boolean;
 }
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick, layersMenuOpen }) => {
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
+  onLayersClick, 
+  onCompositesClick,
+  layersMenuOpen,
+  compositesMenuOpen 
+}) => {
   const [selectedTab, setSelectedTab] = useState(0);
   const theme = useTheme();
-  // Сбрасываем выделение кнопки слоев при закрытии меню
+
+  // Сбрасываем выделение кнопки при закрытии соответствующего меню
   useEffect(() => {
     if (!layersMenuOpen && selectedTab === 1) {
-      setSelectedTab(0); // Возвращаемся к первой вкладке (панель управления)
+      setSelectedTab(0);
     }
-  }, [layersMenuOpen, selectedTab]);
-    const tabs: TabContent[] = [
+    if (!compositesMenuOpen && selectedTab === 2) {
+      setSelectedTab(0);
+    }
+  }, [layersMenuOpen, compositesMenuOpen, selectedTab]);
+
+  const tabs: TabContent[] = [
     {
       title: 'Панель управления',
       icon: <DashboardIcon />,
@@ -52,6 +65,16 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick, layersMenuOpen
         <Box p={3}>
           <h5>Слои карты</h5>
           <p>Здесь вы можете выбрать различные слои для отображения на карте.</p>
+        </Box>
+      ),
+    },
+    {
+      title: 'Композитные слои',
+      icon: <TimelineIcon />,
+      content: (
+        <Box p={3}>
+          <h5>Композитные слои</h5>
+          <p>Анализ изменений и композитные слои.</p>
         </Box>
       ),
     },
@@ -112,7 +135,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick, layersMenuOpen
           }}
         >
           <Divider sx={{ mb: 1 }} />
-            {/* Вертикальное меню с вкладками - только иконки */}
+          {/* Вертикальное меню с вкладками - только иконки */}
           <List sx={{ width: '100%', p: 0 }}>
             {tabs.map((tab, index) => (
               <Tooltip key={index} title={tab.title} placement="right">
@@ -123,6 +146,10 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ onLayersClick, layersMenuOpen
                     // Если это кнопка слоев (индекс 1), вызываем onLayersClick
                     if (index === 1 && onLayersClick) {
                       onLayersClick();
+                    }
+                    // Если это кнопка композитов (индекс 2), вызываем onCompositesClick
+                    if (index === 2 && onCompositesClick) {
+                      onCompositesClick();
                     }
                   }}
                   sx={{

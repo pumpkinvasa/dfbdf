@@ -14,6 +14,7 @@ import { ThemeContext } from '../ThemeContext';
 import LeftSidebar from '../components/LeftSidebar';
 import RightSidebar from '../components/RightSidebar';
 import LayersMenu, { LayerType } from '../components/LayersMenu';
+import CompositesMenu, { CompositeType } from '../components/CompositesMenu';
 import OpenLayersMap, { OpenLayersMapHandle } from '../components/OpenLayersMap';
 import SearchLocation from '../components/SearchLocation';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -27,8 +28,11 @@ const HomePage: React.FC = () => {
   const [activeDrawingTool, setActiveDrawingTool] = useState<'polygon' | 'rectangle' | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [featureCount, setFeatureCount] = useState(0);  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [featureCount, setFeatureCount] = useState(0);
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
+  const [currentComposite, setCurrentComposite] = useState<CompositeType | null>(null);
   const [overlaySettings, setOverlaySettings] = useState({
     borders: false,
     contour: false,
@@ -134,6 +138,12 @@ const HomePage: React.FC = () => {
 
   const handleLayersClick = useCallback(() => {
     setLayersMenuOpen(true);
+    setCompositesMenuOpen(false);
+  }, []);
+
+  const handleCompositesClick = useCallback(() => {
+    setCompositesMenuOpen(true);
+    setLayersMenuOpen(false);
   }, []);
 
   const handleLayersMenuClose = useCallback(() => {
@@ -146,9 +156,20 @@ const HomePage: React.FC = () => {
       }
     }
   }, [activeDrawingTool]);
+
+  const handleCompositesMenuClose = useCallback(() => {
+    setCompositesMenuOpen(false);
+  }, []);
+
   const handleLayerSelect = useCallback((layerId: LayerType) => {
     setCurrentLayer(layerId);
     setSnackbarMessage(`Выбран слой: ${layerId}`);
+    setSnackbarOpen(true);
+  }, []);
+
+  const handleCompositeSelect = useCallback((compositeId: CompositeType) => {
+    setCurrentComposite(compositeId);
+    setSnackbarMessage(`Выбран композит: ${compositeId}`);
     setSnackbarOpen(true);
   }, []);
 
@@ -182,7 +203,7 @@ const HomePage: React.FC = () => {
       >
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
-            Приложение с OSM (OpenLayers)
+            Automated Earth Sensing App
           </Typography>
 
           <Box sx={{ flexGrow: 1 }} />
@@ -207,8 +228,10 @@ const HomePage: React.FC = () => {
         }}
       >
         <LeftSidebar 
-          onLayersClick={handleLayersClick} 
-          layersMenuOpen={layersMenuOpen} 
+          onLayersClick={handleLayersClick}
+          onCompositesClick={handleCompositesClick}
+          layersMenuOpen={layersMenuOpen}
+          compositesMenuOpen={compositesMenuOpen}
         />
         <Box
           sx={{
@@ -217,7 +240,8 @@ const HomePage: React.FC = () => {
             overflow: 'hidden',
             position: 'relative',
           }}
-        >          <OpenLayersMap
+        >
+          <OpenLayersMap
             ref={mapRef}
             initialCenter={[37.6173, 55.7558]}
             initialZoom={10}
@@ -229,20 +253,28 @@ const HomePage: React.FC = () => {
             onFeatureCountChange={handleFeatureCountChange}
             overlaySettings={overlaySettings}
           />
-        </Box>        <RightSidebar
+        </Box>
+        <RightSidebar
           onToolSelect={handleToolSelect}
           onDrawingToolSelect={handleDrawingToolSelect}
           onClearAllFeatures={handleClearAllFeatures}
           activeDrawingTool={activeDrawingTool}
           hasFeatures={featureCount > 0}
         />
-          <LayersMenu
+        <LayersMenu
           open={layersMenuOpen}
           onClose={handleLayersMenuClose}
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
         />
-      </Box>      <Snackbar
+        <CompositesMenu
+          open={compositesMenuOpen}
+          onClose={handleCompositesMenuClose}
+          onCompositeSelect={handleCompositeSelect}
+          currentComposite={currentComposite}
+        />
+      </Box>
+      <Snackbar
         open={snackbarOpen}
         autoHideDuration={2000}
         onClose={handleCloseSnackbar}
