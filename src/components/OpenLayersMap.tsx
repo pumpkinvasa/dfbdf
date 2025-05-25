@@ -358,22 +358,23 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
     map.getView().on('change:resolution', () => {
       currentZoomRef.current = map.getView().getZoom() || initialZoom;
-    });
-
-    return () => {
+    });    return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.setTarget(undefined);
         mapInstanceRef.current = null;
       }
     };
-  }, [onFeatureCountChange, currentLayer]);
-
+  }, [onFeatureCountChange]); // Убираем currentLayer из зависимостей
   // Обновление базового слоя при изменении currentLayer
   useEffect(() => {
-    if (mapInstanceRef.current && baseLayerRef.current) {
+    if (mapInstanceRef.current && baseLayerRef.current && vectorLayerRef.current) {
       // Сохраняем текущий центр и зум перед обновлением слоев
       const currentCenter = currentCenterRef.current;
       const currentZoom = currentZoomRef.current;
+
+      // Временно сохраняем векторный слой с фигурами
+      const vectorLayer = vectorLayerRef.current;
+      mapInstanceRef.current.removeLayer(vectorLayer);
 
       // Удаляем старый базовый слой
       mapInstanceRef.current.removeLayer(baseLayerRef.current);
@@ -393,15 +394,17 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       const newOverlayLayers = createOverlayLayers(currentLayer);
       overlayLayersRef.current = newOverlayLayers;
 
-      // Добавляем новый базовый слой на позицию 0
-      mapInstanceRef.current.getLayers().insertAt(0, newBaseLayer);
-
-      // Добавляем новые overlay слои
-      const layers = mapInstanceRef.current.getLayers();
-      const vectorLayerIndex = layers.getLength() - 1;
-      Object.values(newOverlayLayers).forEach((layer, index) => {
-        layers.insertAt(vectorLayerIndex + index, layer);
+      // Добавляем слои в правильном порядке:
+      // 1. Базовый слой (фон)
+      mapInstanceRef.current.addLayer(newBaseLayer);
+      
+      // 2. Overlay слои (границы, контуры, дороги, подписи)
+      Object.values(newOverlayLayers).forEach(layer => {
+        mapInstanceRef.current?.addLayer(layer);
       });
+      
+      // 3. Векторный слой с фигурами всегда сверху
+      mapInstanceRef.current.addLayer(vectorLayer);
 
       // Восстанавливаем текущий центр и зум
       const view = mapInstanceRef.current.getView();
