@@ -124,10 +124,15 @@ const HomePage: React.FC = () => {
   const handleFeatureCountChange = useCallback((count: number) => {
     setFeatureCount(count);
   }, []);
-
   const handleClearAllFeatures = useCallback(() => {
-    if (mapRef.current && mapRef.current.clearAllFeatures) {
-      mapRef.current.clearAllFeatures();
+    if (mapRef.current) {
+      if (mapRef.current.clearAllFeatures) {
+        mapRef.current.clearAllFeatures();
+      }
+      // Очищаем временный прямоугольник и кнопку
+      if (mapRef.current.clearTemporaryRectangle) {
+        mapRef.current.clearTemporaryRectangle();
+      }
       setSnackbarMessage('Все объекты удалены');
       setSnackbarOpen(true);
     }
