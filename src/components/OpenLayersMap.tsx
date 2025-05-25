@@ -74,6 +74,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       labels?: TileLayer;
       roads?: TileLayer;
     }>({});
+    const currentZoomRef = useRef<number>(initialZoom); // Ref to store current zoom level
+    const currentCenterRef = useRef<[number, number]>(initialCenter); // Ref to store current center
     const theme = useTheme();
 
     // Функция для обновления видимости overlay слоев
@@ -324,9 +326,16 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         if (onFeatureCountChange) {
           onFeatureCountChange(vectorSource.getFeatures().length);
         }
-      });
+      });      mapInstanceRef.current = map;
 
-      mapInstanceRef.current = map;
+      // Добавляем слушатель изменений вида карты для сохранения текущего зума и центра
+      map.getView().on('change:center', () => {
+        currentCenterRef.current = map.getView().getCenter() as [number, number];
+      });
+      
+      map.getView().on('change:resolution', () => {
+        currentZoomRef.current = map.getView().getZoom() || initialZoom;
+      });
 
       return () => {
         if (mapInstanceRef.current) {
