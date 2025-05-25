@@ -6,7 +6,7 @@ import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
 import XYZ from 'ol/source/XYZ';
 import BingMaps from 'ol/source/BingMaps';
-import { fromLonLat } from 'ol/proj';
+import { fromLonLat, toLonLat } from 'ol/proj';
 import { Box, useTheme } from '@mui/material';
 import { Attribution, defaults as defaultControls } from 'ol/control';
 import VectorLayer from 'ol/layer/Vector';
@@ -20,8 +20,8 @@ import GeoJSON from 'ol/format/GeoJSON';
 // Тип для ref
 export interface OpenLayersMapHandle {
   loadGeoJSON: (geoJSON: any) => void;
-  clearAllFeatures: () => void; // New method to clear all features
-  disableDrawingMode: () => void; // New method to disable drawing mode programmatically
+  clearAllFeatures: () => void;
+  disableDrawingMode: () => void;
 }
 
 interface OpenLayersMapProps {
@@ -31,8 +31,8 @@ interface OpenLayersMapProps {
   zoom?: number;
   drawingTool?: 'polygon' | 'rectangle' | null;
   onFeatureAdded?: (feature: any) => void;
-  onFeatureCountChange?: (count: number) => void; // New prop to report feature count
-  currentLayer?: string; // Add currentLayer prop
+  onFeatureCountChange?: (count: number) => void;
+  currentLayer?: string;
   overlaySettings?: {
     borders: boolean;
     contour: boolean;
@@ -41,7 +41,6 @@ interface OpenLayersMapProps {
   };
 }
 
-// Используем forwardRef для передачи ref от родительского компонента
 const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
   (
     {
@@ -52,7 +51,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       drawingTool,
       onFeatureAdded,
       onFeatureCountChange,
-      currentLayer = 'OSM', // Default to OSM
+      currentLayer = 'OSM',
       overlaySettings = {
         borders: false,
         contour: false,
@@ -61,21 +60,22 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       },
     },
     ref,
-  ) => {    const mapRef = useRef<HTMLDivElement>(null);
+  ) => {
+    const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<Map | null>(null);
     const vectorSourceRef = useRef<VectorSource | null>(null);
     const vectorLayerRef = useRef<VectorLayer | null>(null);
     const drawInteractionRef = useRef<Draw | null>(null);
     const snapInteractionRef = useRef<Snap | null>(null);
-    const baseLayerRef = useRef<TileLayer | null>(null); // Add ref for base layer
+    const baseLayerRef = useRef<TileLayer | null>(null);
     const overlayLayersRef = useRef<{
       borders?: TileLayer;
       contour?: TileLayer;
       labels?: TileLayer;
       roads?: TileLayer;
     }>({});
-    const currentZoomRef = useRef<number>(initialZoom); // Ref to store current zoom level
-    const currentCenterRef = useRef<[number, number]>(initialCenter); // Ref to store current center
+    const currentZoomRef = useRef<number>(initialZoom);
+    const currentCenterRef = useRef<[number, number]>(initialCenter);
     const theme = useTheme();
 
     // Функция для обновления видимости overlay слоев
@@ -88,14 +88,16 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           layer.setVisible(visible);
         }
       });
-    };    // Создание базовых слоев карты
+    };
+
+    // Создание базовых слоев карты
     const createBaseLayer = (layerType: string): TileLayer => {
       switch (layerType) {
         case 'BingAerial':
           return new TileLayer({
             source: new BingMaps({
-              key: 'AuhiCJHlGzhg93IqUH_oCpl_-ZUrIE6SPftlyGYUvr9Amx5nzA-WqGcPquyFZl4L', // Используем публичный ключ для демо
-              imagerySet: 'Aerial', // Спутниковые снимки
+              key: 'AuhiCJHlGzhg93IqUH_oCpl_-ZUrIE6SPftlyGYUvr9Amx5nzA-WqGcPquyFZl4L',
+              imagerySet: 'Aerial',
             }),
           });
         case 'YandexSatellite':
@@ -132,11 +134,12 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             source: new OSM(),
           });
       }
-    };// Создание overlay слоев
+    };
+
+    // Создание overlay слоев
     const createOverlayLayers = (layerType: string) => {
       const layers: { [key: string]: TileLayer } = {};
 
-      // Слой границ (используем OpenStreetMap с фильтром для границ)
       layers.borders = new TileLayer({
         source: new XYZ({
           url: 'https://tiles.wmflabs.org/osm-intl/{z}/{x}/{y}.png',
@@ -146,7 +149,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         visible: false
       });
 
-      // Слой контуров (используем SRTM данные)
       layers.contour = new TileLayer({
         source: new XYZ({
           url: 'https://maps.refuges.info/hiking/{z}/{x}/{y}.png',
@@ -156,15 +158,15 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         visible: false
       });
 
-      // Слой подписей (OpenStreetMap labels)
       layers.labels = new TileLayer({
         source: new XYZ({
           url: 'https://stamen-tiles-{a-d}.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png',
           attributions: '© Stamen Design'
         }),
         opacity: 1.0,
-        visible: true // По умолчанию включен
-      });      // Слой дорог - разные источники в зависимости от базового слоя
+        visible: true
+      });
+
       const createRoadLayer = () => {
         switch (layerType) {
           case 'BingAerial':
@@ -206,10 +208,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           case 'ESRIStreet':
           case 'OSM':
           default:
-            // Для OSM и ESRIStreet слой дорог не нужен, так как они уже встроены
             return new TileLayer({
               source: new XYZ({
-                url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', // Прозрачный пиксель
+                url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                 attributions: ''
               }),
               opacity: 0,
@@ -221,10 +222,11 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       layers.roads = createRoadLayer();
 
       return layers;
-    };// Стиль для отображения фигур с белыми точками на углах
+    };
+
+    // Стиль для отображения фигур с белыми точками на углах
     const createVectorStyle = () => {
       const styles = [
-        // Основной стиль для фигуры
         new Style({
           fill: new Fill({
             color: 'rgba(0, 179, 179, 0.2)',
@@ -239,10 +241,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       return (feature: any) => {
         const geometry = feature.getGeometry();
         
-        // Добавляем белые точки на углах
         if (geometry instanceof Polygon) {
-          const coordinates = geometry.getCoordinates()[0]; // Получаем координаты внешнего кольца
-          coordinates.slice(0, -1).forEach((coord: any) => { // Исключаем последнюю точку (дубликат первой)
+          const coordinates = geometry.getCoordinates()[0];
+          coordinates.slice(0, -1).forEach((coord: any) => {
             styles.push(
               new Style({
                 geometry: new Point(coord),
@@ -263,7 +264,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         
         return styles;
       };
-    };    // Инициализация карты
+    };
+
+    // Инициализация карты
     useEffect(() => {
       if (!mapRef.current || mapInstanceRef.current) return;
 
@@ -276,20 +279,22 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       vectorSourceRef.current = vectorSource;
       vectorLayerRef.current = vectorLayer;
 
-      // Создаем базовый слой
       const baseLayer = createBaseLayer(currentLayer);
-      baseLayerRef.current = baseLayer;      // Создаем overlay слои
+      baseLayerRef.current = baseLayer;
+
       const overlayLayers = createOverlayLayers(currentLayer);
       overlayLayersRef.current = overlayLayers;
 
       const attribution = new Attribution({
         collapsible: false,
-      });      const map = new Map({
+      });
+
+      const map = new Map({
         target: mapRef.current,
         layers: [
-          baseLayer, // Используем созданный базовый слой
-          ...Object.values(overlayLayers), // Добавляем overlay слои
-          vectorLayer, // Векторный слой должен быть сверху
+          baseLayer,
+          ...Object.values(overlayLayers),
+          vectorLayer,
         ],
         view: new View({
           center: fromLonLat(initialCenter),
@@ -298,25 +303,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         controls: defaultControls({ attribution: false }).extend([attribution]),
       });
 
-      // Отключаем modify interaction для предотвращения редактирования полигонов
-      // const modify = new Modify({
-      //   source: vectorSource,
-      //   style: new Style({
-      //     image: new CircleStyle({
-      //       radius: 6,
-      //       fill: new Fill({
-      //         color: '#ffcc33',
-      //       }),
-      //       stroke: new Stroke({
-      //         color: '#ffffff',
-      //         width: 2,
-      //       }),
-      //     }),
-      //   }),
-      // });
-      // map.addInteraction(modify);
-
-      // Track feature count changes
       vectorSource.on('addfeature', () => {
         if (onFeatureCountChange) {
           onFeatureCountChange(vectorSource.getFeatures().length);
@@ -326,11 +312,12 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         if (onFeatureCountChange) {
           onFeatureCountChange(vectorSource.getFeatures().length);
         }
-      });      mapInstanceRef.current = map;
+      });
 
-      // Добавляем слушатель изменений вида карты для сохранения текущего зума и центра
+      mapInstanceRef.current = map;
+
       map.getView().on('change:center', () => {
-        currentCenterRef.current = map.getView().getCenter() as [number, number];
+        currentCenterRef.current = toLonLat(map.getView().getCenter() as [number, number]) as [number, number];
       });
       
       map.getView().on('change:resolution', () => {
@@ -340,11 +327,18 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       return () => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.setTarget(undefined);
-          mapInstanceRef.current = null;        }
+          mapInstanceRef.current = null;
+        }
       };
-    }, [onFeatureCountChange, currentLayer]); // Add currentLayer dependency    // Обновление базового слоя при изменении currentLayer
+    }, [onFeatureCountChange, currentLayer]);
+
+    // Обновление базового слоя при изменении currentLayer
     useEffect(() => {
       if (mapInstanceRef.current && baseLayerRef.current) {
+        // Сохраняем текущий центр и зум перед обновлением слоев
+        const currentCenter = currentCenterRef.current;
+        const currentZoom = currentZoomRef.current;
+
         // Удаляем старый базовый слой
         mapInstanceRef.current.removeLayer(baseLayerRef.current);
         
@@ -359,19 +353,24 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         const newBaseLayer = createBaseLayer(currentLayer);
         baseLayerRef.current = newBaseLayer;
         
-        // Создаем новые overlay слои с учетом нового базового слоя
+        // Создаем новые overlay слои
         const newOverlayLayers = createOverlayLayers(currentLayer);
         overlayLayersRef.current = newOverlayLayers;
         
-        // Добавляем новый базовый слой на позицию 0 (внизу)
+        // Добавляем новый базовый слой на позицию 0
         mapInstanceRef.current.getLayers().insertAt(0, newBaseLayer);
         
         // Добавляем новые overlay слои
         const layers = mapInstanceRef.current.getLayers();
-        const vectorLayerIndex = layers.getLength() - 1; // Векторный слой должен быть последним
+        const vectorLayerIndex = layers.getLength() - 1;
         Object.values(newOverlayLayers).forEach((layer, index) => {
           layers.insertAt(vectorLayerIndex + index, layer);
         });
+        
+        // Восстанавливаем текущий центр и зум
+        const view = mapInstanceRef.current.getView();
+        view.setCenter(fromLonLat(currentCenter));
+        view.setZoom(currentZoom);
         
         // Применяем текущие настройки overlay
         updateOverlayVisibility();
@@ -405,10 +404,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         return;
       }
 
-      mapRef.current.style.cursor = 'crosshair';      // Стиль для рисования с белыми точками на углах
+      mapRef.current.style.cursor = 'crosshair';
+
       const drawingStyle = (feature: any) => {
         const styles = [
-          // Основной стиль для фигуры во время рисования
           new Style({
             fill: new Fill({
               color: 'rgba(0, 179, 179, 0.2)',
@@ -423,7 +422,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
         const geometry = feature.getGeometry();
         
-        // Добавляем белые точки на углах во время рисования
         if (geometry instanceof Polygon) {
           const coordinates = geometry.getCoordinates()[0];
           coordinates.slice(0, -1).forEach((coord: any) => {
@@ -446,7 +444,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         }
         
         return styles;
-      };const geometryType = drawingTool === 'polygon' ? 'Polygon' : 'Circle';
+      };
+
+      const geometryType = drawingTool === 'polygon' ? 'Polygon' : 'Circle';
       const geometryFunction =
         drawingTool === 'rectangle'
           ? (coordinates: any, geometry: any) => {
@@ -467,7 +467,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         type: geometryType as any,
         geometryFunction,
         style: drawingStyle,
-        freehand: false, // Изменено на false для рисования кликами
+        freehand: false,
       });
 
       draw.on('drawend', (event) => {
@@ -488,13 +488,18 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       const snap = new Snap({
         source: vectorSourceRef.current,
       });
-      mapInstanceRef.current.addInteraction(snap);      drawInteractionRef.current = draw;
-      snapInteractionRef.current = snap;    }, [drawingTool, onFeatureAdded]);
+      mapInstanceRef.current.addInteraction(snap);
 
-    // Обновление видимости overlay слоев при изменении настроек
+      drawInteractionRef.current = draw;
+      snapInteractionRef.current = snap;
+    }, [drawingTool, onFeatureAdded]);
+
+    // Обновление видимости overlay слоев
     useEffect(() => {
       updateOverlayVisibility();
-    }, [overlaySettings]);    // Экспонируем функции через ref
+    }, [overlaySettings]);
+
+    // Экспонируем функции через ref
     useImperativeHandle(
       ref,
       () => ({
@@ -511,15 +516,15 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             feature.setStyle(createVectorStyle());
           });
 
-          vectorSourceRef.current.addFeatures(features);          // Автоматический переход к загруженным объектам
+          vectorSourceRef.current.addFeatures(features);
+
           if (features.length > 0) {
             const extent = vectorSourceRef.current.getExtent();
             const view = mapInstanceRef.current.getView();
             
-            // Устанавливаем вид с отступами для лучшего отображения
             view.fit(extent, {
               padding: [20, 20, 20, 20],
-              maxZoom: 16, // Максимальный зум для предотвращения чрезмерного приближения
+              maxZoom: 16,
             });
           }
         },
@@ -531,7 +536,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         disableDrawingMode: () => {
           if (!mapInstanceRef.current || !mapRef.current) return;
           
-          // Удаляем интерактивные элементы рисования
           if (drawInteractionRef.current) {
             mapInstanceRef.current.removeInteraction(drawInteractionRef.current);
             drawInteractionRef.current = null;
@@ -541,7 +545,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             snapInteractionRef.current = null;
           }
           
-          // Сбрасываем курсор
           mapRef.current.style.cursor = '';
         },
       }),
