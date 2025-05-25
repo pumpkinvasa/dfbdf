@@ -47,9 +47,9 @@ const HomePage: React.FC = () => {
     contour: false,
     labels: true,
     roads: false
-  });
-  const [analysisProgress, setAnalysisProgress] = useState(0);
+  });  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [polygonCenter, setPolygonCenter] = useState<[number, number] | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const mapRef = useRef<OpenLayersMapHandle>(null);
 
@@ -242,11 +242,12 @@ const HomePage: React.FC = () => {
         const features = mapRef.current.exportFeatures();
         coords = features.map(feature => feature as GeoJSONFeature);
         console.log('Sending features:', coords); // Debug log
-      }
-
-      try {
+      }      try {
         setIsAnalyzing(true);
         setAnalysisProgress(0);
+        
+        // Автоматически закрываем меню композитов при начале обработки
+        setCompositesMenuOpen(false);
 
         // Connect to WebSocket first
         if (wsRef.current) {
@@ -337,7 +338,6 @@ const HomePage: React.FC = () => {
     setSnackbarMessage('Область анализа подтверждена');
     setSnackbarOpen(true);
   }, []);
-
   const handleOverlayChange = useCallback((overlay: string, checked: boolean) => {
     setOverlaySettings(prev => ({
       ...prev,
@@ -345,6 +345,10 @@ const HomePage: React.FC = () => {
     }));
     setSnackbarMessage(`${checked ? 'Включен' : 'Выключен'} слой: ${overlay}`);
     setSnackbarOpen(true);
+  }, []);
+
+  const handlePolygonCenterChange = useCallback((center: [number, number] | null) => {
+    setPolygonCenter(center);
   }, []);
 
   return (
@@ -405,8 +409,7 @@ const HomePage: React.FC = () => {
             overflow: 'hidden',
             position: 'relative',
           }}
-        >
-          <OpenLayersMap
+        >          <OpenLayersMap
             ref={mapRef}
             initialCenter={[37.6173, 55.7558]}
             initialZoom={10}
@@ -419,10 +422,11 @@ const HomePage: React.FC = () => {
             overlaySettings={overlaySettings}
             onTemporaryRectangleConfirm={handleTemporaryRectangleConfirm}
             currentComposite={currentComposite}
-          />
-          <ProgressOverlay
+            onPolygonCenterChange={handlePolygonCenterChange}
+          />          <ProgressOverlay
             progress={analysisProgress}
             visible={isAnalyzing}
+            polygonCenter={polygonCenter}
           />
         </Box>
         <RightSidebar

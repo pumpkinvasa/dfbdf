@@ -51,6 +51,7 @@ interface OpenLayersMapProps {
   };
   onTemporaryRectangleConfirm?: () => void;
   currentComposite?: string | null;
+  onPolygonCenterChange?: (polygonCenter: [number, number] | null) => void;
 }
 
 const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
@@ -71,7 +72,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         roads: false
       },
       onTemporaryRectangleConfirm,
-      currentComposite
+      currentComposite,
+      onPolygonCenterChange
     },
     ref,
   ) => {
@@ -111,7 +113,34 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           }
         }
       }
-    }, []);    // Function to convert world file data to extent
+    }, []);
+
+    // Function to calculate polygon center and convert to screen coordinates
+    const calculatePolygonCenterInPixels = useCallback(() => {
+      if (!mapInstanceRef.current || !vectorSourceRef.current) return null;
+
+      const features = vectorSourceRef.current.getFeatures();
+      if (features.length === 0) return null;
+
+      // Get the last added polygon
+      const lastFeature = features[features.length - 1];
+      const geometry = lastFeature.getGeometry();
+
+      if (!geometry || !(geometry instanceof Polygon)) return null;
+
+      // Calculate the center of the polygon extent
+      const extent = geometry.getExtent();
+      const centerX = (extent[0] + extent[2]) / 2;
+      const centerY = (extent[1] + extent[3]) / 2;
+
+      // Convert map coordinates to screen pixels
+      const pixel = mapInstanceRef.current.getPixelFromCoordinate([centerX, centerY]);
+      if (!pixel) return null;
+
+      return [pixel[0], pixel[1]] as [number, number];
+    }, []);
+
+    // Function to convert world file data to extent
     const worldFileToExtent = useCallback((worldFile: any, imageWidth?: number, imageHeight?: number) => {
       console.log('Converting world file to extent:', worldFile);
       console.log('Image dimensions:', imageWidth, 'x', imageHeight);
@@ -414,30 +443,52 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         zoom: initialZoom,
       }),
       controls: defaultControls({ attribution: false }).extend([attribution]),
-    });
-
-    vectorSource.on('addfeature', () => {
+    });    vectorSource.on('addfeature', () => {
       if (onFeatureCountChange) {
         onFeatureCountChange(vectorSource.getFeatures().length);
       }
-    });    vectorSource.on('removefeature', () => {
+      
+      // Update polygon center for progress overlay positioning
+      if (onPolygonCenterChange) {
+        const polygonCenter = calculatePolygonCenterInPixels();
+        onPolygonCenterChange(polygonCenter);
+      }
+    });
+
+    vectorSource.on('removefeature', () => {
       if (onFeatureCountChange) {
         onFeatureCountChange(vectorSource.getFeatures().length);
+      }
+      
+      // Update polygon center for progress overlay positioning
+      if (onPolygonCenterChange) {
+        const polygonCenter = calculatePolygonCenterInPixels();
+        onPolygonCenterChange(polygonCenter);
       }
       
       // Удаляем изображение при удалении полигона
       clearImageLayer();
     });
 
-    mapInstanceRef.current = map;
-
-    map.getView().on('change:center', () => {
+    mapInstanceRef.current = map;    map.getView().on('change:center', () => {
       currentCenterRef.current = toLonLat(map.getView().getCenter() as [number, number]) as [number, number];
+      
+      // Update polygon center when map view changes
+      if (onPolygonCenterChange) {
+        const polygonCenter = calculatePolygonCenterInPixels();
+        onPolygonCenterChange(polygonCenter);
+      }
     });
 
     map.getView().on('change:resolution', () => {
       currentZoomRef.current = map.getView().getZoom() || initialZoom;
-    });    return () => {
+      
+      // Update polygon center when map view changes
+      if (onPolygonCenterChange) {
+        const polygonCenter = calculatePolygonCenterInPixels();
+        onPolygonCenterChange(polygonCenter);
+      }
+    });return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.setTarget(undefined);
         mapInstanceRef.current = null;

@@ -4,18 +4,30 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 interface ProgressOverlayProps {
   progress: number;
   visible: boolean;
+  polygonCenter?: [number, number] | null; // Координаты центра полигона в пикселях
 }
 
-const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, visible }) => {
+const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, visible, polygonCenter }) => {
   if (!visible) return null;
 
-  return (
-    <Box
-      sx={{
-        position: 'absolute',
+  // Определяем позицию: либо центр полигона, либо центр экрана
+  const position = polygonCenter 
+    ? {
+        position: 'absolute' as const,
+        left: polygonCenter[0],
+        top: polygonCenter[1],
+        transform: 'translate(-50%, -50%)',
+      }
+    : {
+        position: 'absolute' as const,
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
+      };
+  return (
+    <Box
+      sx={{
+        ...position,
         bgcolor: 'rgba(0, 0, 0, 0.7)',
         borderRadius: 2,
         p: 3,
