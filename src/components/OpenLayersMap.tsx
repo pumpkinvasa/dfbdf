@@ -937,9 +937,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
                   console.error('Image load error:', error);
                 };
                 img.src = src;
-              }
-            }),
-            opacity: 0.8, // Немного увеличиваем прозрачность для лучшей видимости
+              }            }),
+            opacity: 1.0, // Полная непрозрачность для четкого отображения изображения
             zIndex: 50 // Средний zIndex между базовыми слоями и векторными
           });
 

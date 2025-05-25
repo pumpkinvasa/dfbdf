@@ -46,9 +46,8 @@ const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, visible, po
         sx={{
           color: 'primary.main',
         }}
-      />
-      <Typography variant="h6" color="white">
-        {`Анализ композита: ${progress}%`}
+      />      <Typography variant="h6" color="white">
+        {`Генерация композита: ${progress}%`}
       </Typography>
     </Box>
   );
