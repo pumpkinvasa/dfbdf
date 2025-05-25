@@ -214,37 +214,48 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
               mr: 1
             }}
           >
-            {drawingTools.map((tool, idx) => (
-              <Tooltip 
-                key={idx} 
-                title={tool.name} 
-                placement="bottom"
-                arrow
-              >
-                <IconButton
-                  size="small"
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    bgcolor: activeDrawingTool === tool.type ? theme.palette.primary.main : 'transparent',
-                    color: activeDrawingTool === tool.type 
-                      ? '#FFF' 
-                      : theme.palette.mode === 'dark' 
-                        ? '#00E5C5' 
-                        : theme.palette.primary.main,
-                    '&:hover': {
-                      bgcolor: activeDrawingTool === tool.type
-                        ? theme.palette.primary.main
-                        : theme.palette.action.hover,
+          {drawingTools.map((tool, idx) => (
+            <Tooltip 
+              key={idx} 
+              title={tool.name} 
+              placement="bottom"
+              arrow
+              PopperProps={{
+                disablePortal: true,
+                modifiers: [
+                  {
+                    name: 'preventOverflow',
+                    options: {
+                      boundary: document.body,
                     },
-                    borderRadius: '6px',
-                  }}
-                  onClick={() => handleDrawingToolClick(tool.type)}
-                >
-                  {tool.icon}
-                </IconButton>
-              </Tooltip>
-            ))}
+                  }
+                ]
+              }}
+            >
+              <IconButton
+                size="small"
+                sx={{
+                  width: 32,
+                  height: 32,
+                  bgcolor: activeDrawingTool === tool.type ? theme.palette.primary.main : 'transparent',
+                  color: activeDrawingTool === tool.type 
+                    ? '#FFF' 
+                    : theme.palette.mode === 'dark' 
+                      ? '#00E5C5' 
+                      : theme.palette.primary.main,
+                  '&:hover': {
+                    bgcolor: activeDrawingTool === tool.type
+                      ? theme.palette.primary.main
+                      : theme.palette.action.hover,
+                  },
+                  borderRadius: '6px',
+                }}
+                onClick={() => handleDrawingToolClick(tool.type)}
+              >
+                {tool.icon}
+              </IconButton>
+            </Tooltip>
+          ))}
           </Paper>
         </ClickAwayListener>
       </Popper>
