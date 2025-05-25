@@ -6,20 +6,22 @@ import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
 import XYZ from 'ol/source/XYZ';
 import BingMaps from 'ol/source/BingMaps';
-import { fromLonLat, toLonLat } from 'ol/proj';
+import { fromLonLat, toLonLat, transformExtent } from 'ol/proj';
 import { Box, useTheme } from '@mui/material';
 import { Attribution, defaults as defaultControls } from 'ol/control';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import ImageLayer from 'ol/layer/Image';
+import Static from 'ol/source/ImageStatic';
 import { Draw, Modify, Snap } from 'ol/interaction';
 import Polygon from 'ol/geom/Polygon';
 import Point from 'ol/geom/Point';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text } from 'ol/style';
 import GeoJSON from 'ol/format/GeoJSON';
 import { getArea } from 'ol/sphere';
-import { Coordinate } from 'ol/coordinate';
-import Feature from 'ol/Feature';
 import { Overlay } from 'ol';
+import Feature from 'ol/Feature';
+import { Coordinate } from 'ol/coordinate';
 
 // Тип для ref
 export interface OpenLayersMapHandle {
@@ -28,6 +30,8 @@ export interface OpenLayersMapHandle {
   disableDrawingMode: () => void;
   showTemporaryRectangle: () => void;
   clearTemporaryRectangle: () => void;
+  exportFeatures: () => any[];
+  displayGeoReferencedImage: (imageData: string, worldFile: any) => void;
 }
 
 interface OpenLayersMapProps {
@@ -90,6 +94,69 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     const temporaryFeatureRef = useRef<Feature | null>(null);
     const overlayRef = useRef<Overlay | null>(null);
     const temporaryDivRef = useRef<HTMLDivElement | null>(null);
+    const imageLayerRef = useRef<ImageLayer<Static> | null>(null);    // Function to clear existing image layer
+    const clearImageLayer = useCallback(() => {
+      if (imageLayerRef.current && mapInstanceRef.current) {
+        console.log('Clearing existing image layer');
+        mapInstanceRef.current.removeLayer(imageLayerRef.current);
+        imageLayerRef.current = null;
+        
+        // Убеждаемся, что векторный слой все еще на месте
+        if (vectorLayerRef.current) {
+          const layers = mapInstanceRef.current.getLayers();
+          const hasVectorLayer = layers.getArray().includes(vectorLayerRef.current);
+          if (!hasVectorLayer) {
+            console.log('Re-adding vector layer');
+            mapInstanceRef.current.addLayer(vectorLayerRef.current);
+          }
+        }
+      }
+    }, []);    // Function to convert world file data to extent
+    const worldFileToExtent = useCallback((worldFile: any, imageWidth?: number, imageHeight?: number) => {
+      console.log('Converting world file to extent:', worldFile);
+      console.log('Image dimensions:', imageWidth, 'x', imageHeight);
+      
+      // Проверяем, что worldFile содержит нужные данные
+      if (!Array.isArray(worldFile) || worldFile.length < 6) {
+        console.error('Invalid world file format. Expected array with 6 elements:', worldFile);
+        return null;
+      }
+      
+      // World file format: [pixelSizeX, rotationY, rotationX, pixelSizeY, originX, originY]
+      const [pixelSizeX, rotationY, rotationX, pixelSizeY, originX, originY] = worldFile;
+      
+      // Проверяем, что все значения являются числами
+      if ([pixelSizeX, rotationY, rotationX, pixelSizeY, originX, originY].some(val => typeof val !== 'number' || isNaN(val))) {
+        console.error('Invalid numeric values in world file:', worldFile);
+        return null;
+      }
+      
+      // Use provided dimensions or fallback to default
+      const width = imageWidth || 1024;
+      const height = imageHeight || 1024;
+      
+      console.log('Using world file parameters:', {
+        pixelSizeX, rotationY, rotationX, pixelSizeY, originX, originY
+      });
+      
+      // Calculate extent based on image size and world file parameters
+      // World file coordinates are usually for the center of the top-left pixel
+      const minX = originX;
+      const maxY = originY;
+      const maxX = originX + (width * pixelSizeX);
+      const minY = originY + (height * pixelSizeY);
+      
+      const extent = [minX, minY, maxX, maxY];
+      console.log('Calculated extent:', extent);
+      
+      // Дополнительная проверка валидности экстента
+      if (extent.some(val => !isFinite(val))) {
+        console.error('Calculated extent contains invalid values:', extent);
+        return null;
+      }
+      
+      return extent;
+    }, []);
 
     // Функция для обновления видимости overlay слоев
     const updateOverlayVisibility = () => {
@@ -315,12 +382,11 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
   // Инициализация карты
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
-
-    const vectorSource = new VectorSource();
+    if (!mapRef.current || mapInstanceRef.current) return;    const vectorSource = new VectorSource();
     const vectorLayer = new VectorLayer({
       source: vectorSource,
       style: createVectorStyle(),
+      zIndex: 100 // Высокий zIndex для векторного слоя, чтобы он был поверх всех остальных
     });
 
     vectorSourceRef.current = vectorSource;
@@ -375,17 +441,21 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         mapInstanceRef.current = null;
       }
     };
-  }, [onFeatureCountChange]); // Убираем currentLayer из зависимостей
-  // Обновление базового слоя при изменении currentLayer
+  }, [onFeatureCountChange]); // Убираем currentLayer из зависимостей  // Обновление базового слоя при изменении currentLayer
   useEffect(() => {
     if (mapInstanceRef.current && baseLayerRef.current && vectorLayerRef.current) {
       // Сохраняем текущий центр и зум перед обновлением слоев
       const currentCenter = currentCenterRef.current;
       const currentZoom = currentZoomRef.current;
 
-      // Временно сохраняем векторный слой с фигурами
+      // Временно сохраняем векторный слой с фигурами и слой изображения
       const vectorLayer = vectorLayerRef.current;
+      const imageLayer = imageLayerRef.current;
+      
       mapInstanceRef.current.removeLayer(vectorLayer);
+      if (imageLayer) {
+        mapInstanceRef.current.removeLayer(imageLayer);
+      }
 
       // Удаляем старый базовый слой
       mapInstanceRef.current.removeLayer(baseLayerRef.current);
@@ -414,7 +484,12 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         mapInstanceRef.current?.addLayer(layer);
       });
       
-      // 3. Векторный слой с фигурами всегда сверху
+      // 3. Слой изображения (если есть)
+      if (imageLayer) {
+        mapInstanceRef.current.addLayer(imageLayer);
+      }
+      
+      // 4. Векторный слой с фигурами всегда сверху
       mapInstanceRef.current.addLayer(vectorLayer);
 
       // Восстанавливаем текущий центр и зум
@@ -667,7 +742,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     
     temporaryFeatureRef.current = null;
   }, []);
-
   // Экспонируем функции через ref
   useImperativeHandle(
     ref,
@@ -697,6 +771,19 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           });
         }
       },
+      exportFeatures: () => {
+        if (!vectorSourceRef.current) return [];
+        
+        const format = new GeoJSON();
+        const features = vectorSourceRef.current.getFeatures();
+        
+        return features.map(feature => 
+          format.writeFeatureObject(feature, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857',
+          })
+        );
+      },
       clearAllFeatures: () => {
         if (vectorSourceRef.current) {
           vectorSourceRef.current.clear();
@@ -715,19 +802,159 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         }
 
         mapRef.current.style.cursor = '';
-      },
-      showTemporaryRectangle,
-      clearTemporaryRectangle
+      },      showTemporaryRectangle,
+      clearTemporaryRectangle,      displayGeoReferencedImage: (imageData: string, worldFile: any) => {        console.log('=== Starting displayGeoReferencedImage (polygon-based placement) ===');
+        console.log('Image data length:', imageData?.length || 'undefined');
+
+        // Очистить существующий слой изображения
+        clearImageLayer();
+
+        if (!mapInstanceRef.current) {
+          console.error('Map instance not available');
+          return;
+        }
+
+        if (!imageData || imageData.length === 0) {
+          console.error('No image data provided or empty image data');
+          return;
+        }
+
+        if (!vectorSourceRef.current) {
+          console.error('Vector source not available');
+          return;
+        }
+
+        // Получаем все фигуры с карты
+        const features = vectorSourceRef.current.getFeatures();
+        
+        if (features.length === 0) {
+          console.error('No polygons found on the map. Please draw a polygon first.');
+          return;
+        }
+
+        // Берем последний нарисованный полигон
+        const lastFeature = features[features.length - 1];
+        const geometry = lastFeature.getGeometry();
+
+        if (!geometry || !(geometry instanceof Polygon)) {
+          console.error('Last feature is not a polygon');
+          return;
+        }
+
+        // Получаем экстент полигона
+        const polygonExtent = geometry.getExtent();
+        console.log('Using polygon extent for image placement:', polygonExtent);
+        console.log('Polygon extent width:', polygonExtent[2] - polygonExtent[0], 'height:', polygonExtent[3] - polygonExtent[1]);        try {
+          // Проверяем, содержит ли imageData уже data: URL или это чистый base64
+          let imageUrl: string;
+          if (imageData.startsWith('data:image/')) {
+            // Данные уже содержат data: URL
+            imageUrl = imageData;
+            console.log('Image data already contains data: URL');
+          } else {
+            // Определяем формат изображения из base64
+            let imageFormat = 'png';
+            if (imageData.startsWith('/9j/') || imageData.startsWith('iVBOR')) {
+              imageFormat = imageData.startsWith('/9j/') ? 'jpeg' : 'png';
+            }
+            // Создаем data: URL из чистого base64
+            imageUrl = `data:image/${imageFormat};base64,${imageData}`;
+            console.log('Created data: URL for format:', imageFormat);
+          }
+
+          console.log('Final image URL (first 100 chars):', imageUrl.substring(0, 100) + '...');
+
+          // Получаем проекцию карты
+          const mapProjection = mapInstanceRef.current.getView().getProjection().getCode();
+          console.log('Map projection:', mapProjection);
+
+          // Создать новый слой изображения с экстентом полигона
+          const imageLayer = new ImageLayer({
+            source: new Static({
+              url: imageUrl,
+              imageExtent: polygonExtent, // Используем экстент полигона вместо world file
+              projection: mapProjection, // Используем проекцию карты
+              imageLoadFunction: (image: any, src: string) => {
+                console.log('Loading image from source:', src.substring(0, 50) + '...');
+                const img = image.getImage();
+                img.onload = () => {
+                  console.log('Image loaded successfully:', img.width, 'x', img.height);
+                };
+                img.onerror = (error: any) => {
+                  console.error('Image load error:', error);
+                };
+                img.src = src;
+              }
+            }),
+            opacity: 0.8, // Немного увеличиваем прозрачность для лучшей видимости
+            zIndex: 50 // Средний zIndex между базовыми слоями и векторными
+          });
+
+          console.log('Image layer created:', imageLayer);
+          
+          // Добавляем обработчики событий для слоя
+          imageLayer.getSource()?.on('imageloadstart', () => {
+            console.log('Image load started');
+          });
+          
+          imageLayer.getSource()?.on('imageloadend', () => {
+            console.log('Image load ended');
+          });
+          
+          imageLayer.getSource()?.on('imageloaderror', (error: any) => {
+            console.error('Image load error event:', error);
+          });          // Получаем все текущие слои для отладки
+          const allLayers = mapInstanceRef.current.getLayers();
+          console.log('Current layers count before adding image:', allLayers.getLength());
+
+          // Добавляем слой изображения
+          mapInstanceRef.current.addLayer(imageLayer);
+          imageLayerRef.current = imageLayer;
+          
+          console.log('Image layer added to map');
+          console.log('Current layers count after adding image:', mapInstanceRef.current.getLayers().getLength());
+
+          // Проверяем валидность экстента полигона
+          if (polygonExtent.some((val: number) => !isFinite(val))) {
+            console.error('Polygon extent contains invalid values:', polygonExtent);
+            return;
+          }
+
+          // Увеличить масштаб до экстента полигона (где размещено изображение)
+          console.log('Fitting view to polygon extent:', polygonExtent);
+          mapInstanceRef.current.getView().fit(polygonExtent, {
+            padding: [50, 50, 50, 50],
+            maxZoom: 18,
+            duration: 1000
+          });
+          
+          console.log('=== Image layer successfully placed within polygon ===');
+          
+          // Дополнительная проверка видимости слоя
+          setTimeout(() => {
+            const layers = mapInstanceRef.current?.getLayers();
+            const hasImageLayer = layers?.getArray().includes(imageLayer);
+            console.log('Image layer still in map after timeout:', hasImageLayer);
+            console.log('Image layer visibility:', imageLayer.getVisible());
+            console.log('Image layer opacity:', imageLayer.getOpacity());
+          }, 100);
+          
+        } catch (error) {
+          console.error('Error creating image layer:', error);
+          console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        }
+      }
     }),
-    [showTemporaryRectangle, clearTemporaryRectangle],
+    [showTemporaryRectangle, clearTemporaryRectangle, clearImageLayer, worldFileToExtent],
   );
 
   // Очистка при размонтировании
   useEffect(() => {
     return () => {
       clearTemporaryRectangle();
+      clearImageLayer();
     };
-  }, [clearTemporaryRectangle]);
+  }, [clearTemporaryRectangle, clearImageLayer]);
 
   // Обновление размера карты
   useEffect(() => {
