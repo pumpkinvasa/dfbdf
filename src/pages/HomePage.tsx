@@ -169,7 +169,24 @@ const HomePage: React.FC = () => {
 
   const handleCompositeSelect = useCallback((compositeId: CompositeType) => {
     setCurrentComposite(compositeId);
+    
+    // Check if there are any features on the map
+    if (featureCount === 0 && mapRef.current) {
+      // Show temporary rectangle if no features exist
+      mapRef.current.showTemporaryRectangle();
+    }
+    
     setSnackbarMessage(`Выбран композит: ${compositeId}`);
+    setSnackbarOpen(true);
+  }, [featureCount]);
+
+  // Add handler for temporary rectangle confirmation
+  const handleTemporaryRectangleConfirm = useCallback(() => {
+    // Clear the temporary rectangle
+    if (mapRef.current) {
+      mapRef.current.clearTemporaryRectangle();
+    }
+    setSnackbarMessage('Область анализа подтверждена');
     setSnackbarOpen(true);
   }, []);
 
@@ -252,6 +269,8 @@ const HomePage: React.FC = () => {
             onFeatureAdded={handleFeatureAdded}
             onFeatureCountChange={handleFeatureCountChange}
             overlaySettings={overlaySettings}
+            onTemporaryRectangleConfirm={handleTemporaryRectangleConfirm}
+            currentComposite={currentComposite}
           />
         </Box>
         <RightSidebar

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import 'ol/ol.css';
 import Map from 'ol/Map';
 import View from 'ol/View';
@@ -18,12 +18,16 @@ import { Style, Fill, Stroke, Circle as CircleStyle, Text } from 'ol/style';
 import GeoJSON from 'ol/format/GeoJSON';
 import { getArea } from 'ol/sphere';
 import { Coordinate } from 'ol/coordinate';
+import Feature from 'ol/Feature';
+import { Overlay } from 'ol';
 
 // Тип для ref
 export interface OpenLayersMapHandle {
   loadGeoJSON: (geoJSON: any) => void;
   clearAllFeatures: () => void;
   disableDrawingMode: () => void;
+  showTemporaryRectangle: () => void;
+  clearTemporaryRectangle: () => void;
 }
 
 interface OpenLayersMapProps {
@@ -41,6 +45,8 @@ interface OpenLayersMapProps {
     labels: boolean;
     roads: boolean;
   };
+  onTemporaryRectangleConfirm?: () => void;
+  currentComposite?: string | null;
 }
 
 const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
@@ -60,6 +66,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         labels: true,
         roads: false
       },
+      onTemporaryRectangleConfirm,
+      currentComposite
     },
     ref,
   ) => {
@@ -79,6 +87,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     const currentZoomRef = useRef<number>(initialZoom);
     const currentCenterRef = useRef<[number, number]>(initialCenter);
     const theme = useTheme();
+    const temporaryFeatureRef = useRef<Feature | null>(null);
+    const overlayRef = useRef<Overlay | null>(null);
+    const temporaryDivRef = useRef<HTMLDivElement | null>(null);
 
     // Функция для обновления видимости overlay слоев
     const updateOverlayVisibility = () => {
@@ -572,6 +583,91 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     updateOverlayVisibility();
   }, [overlaySettings]);
 
+  // Функция для временного отображения прямоугольника
+  const showTemporaryRectangle = useCallback(() => {
+    if (!mapInstanceRef.current || !vectorSourceRef.current) return;
+
+    // Удаляем существующий временный прямоугольник, если есть
+    if (temporaryFeatureRef.current) {
+      vectorSourceRef.current.removeFeature(temporaryFeatureRef.current);
+    }
+
+    // Получаем текущий экстент (видимую область) карты
+    const extent = mapInstanceRef.current.getView().calculateExtent();
+    const [minX, minY, maxX, maxY] = extent;
+
+    // Вычисляем центр и используем высоту для создания квадрата
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const size = (maxY - minY) * 0.4; // Используем 40% высоты для квадрата
+
+    // Создаем координаты квадрата
+    const rectangleCoords = [
+      [
+        [centerX - size/2, centerY - size/2],
+        [centerX + size/2, centerY - size/2],
+        [centerX + size/2, centerY + size/2],
+        [centerX - size/2, centerY + size/2],
+        [centerX - size/2, centerY - size/2]
+      ]
+    ];
+
+    // Создаем и добавляем новый временный прямоугольник
+    const feature = new Feature({
+      geometry: new Polygon(rectangleCoords)
+    });
+
+    feature.setStyle(createVectorStyle());
+    temporaryFeatureRef.current = feature;
+    vectorSourceRef.current.addFeature(feature);
+
+    // Создаем кнопку подтверждения, если еще не создана
+    if (!overlayRef.current) {
+      const element = document.createElement('div');
+      element.className = 'ol-selectable';
+      element.style.position = 'absolute';
+      element.style.backgroundColor = '#00b3b3';
+      element.style.color = 'white';
+      element.style.padding = '8px 16px';
+      element.style.borderRadius = '4px';
+      element.style.cursor = 'pointer';
+      element.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+      element.style.transform = 'translate(-50%, -50%)';
+      element.innerHTML = 'Применить';
+      element.onclick = () => {
+        if (onTemporaryRectangleConfirm) {
+          onTemporaryRectangleConfirm();
+        }
+      };
+
+      temporaryDivRef.current = element;
+
+      const overlay = new Overlay({
+        element: element,
+        position: [centerX, centerY],
+        positioning: 'center-center'
+      });
+
+      mapInstanceRef.current.addOverlay(overlay);
+      overlayRef.current = overlay;
+    }
+  }, [onTemporaryRectangleConfirm]);
+
+  // Функция для очистки временного прямоугольника
+  const clearTemporaryRectangle = useCallback(() => {
+    if (overlayRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.removeOverlay(overlayRef.current);
+      overlayRef.current = null;
+    }
+
+    if (temporaryDivRef.current) {
+      temporaryDivRef.current.remove();
+      temporaryDivRef.current = null;
+    }
+    
+    temporaryFeatureRef.current = null;
+  }, []);
+
   // Экспонируем функции через ref
   useImperativeHandle(
     ref,
@@ -620,9 +716,18 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
         mapRef.current.style.cursor = '';
       },
+      showTemporaryRectangle,
+      clearTemporaryRectangle
     }),
-    [],
+    [showTemporaryRectangle, clearTemporaryRectangle],
   );
+
+  // Очистка при размонтировании
+  useEffect(() => {
+    return () => {
+      clearTemporaryRectangle();
+    };
+  }, [clearTemporaryRectangle]);
 
   // Обновление размера карты
   useEffect(() => {
