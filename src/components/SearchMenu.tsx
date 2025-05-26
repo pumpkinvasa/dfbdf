@@ -17,8 +17,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import HomeWorkIcon from '@mui/icons-material/HomeWork';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import WaterIcon from '@mui/icons-material/Water';
+import GpsFixedIcon from '@mui/icons-material/GpsFixed';
 
-export type SearchType = 'trenches' | 'fortifications' | 'buildings';
+export type SearchType = 'trenches' | 'fortifications' | 'buildings' | 'reservoirs' | 'impact_analysis';
 
 interface SearchOption {
   id: SearchType;
@@ -53,6 +55,18 @@ const searchOptions: SearchOption[] = [
     name: 'Поиск построек', 
     icon: <HomeWorkIcon />, 
     description: 'Поиск зданий и строительных объектов'
+  },
+  { 
+    id: 'reservoirs', 
+    name: 'Проверка резервуаров', 
+    icon: <WaterIcon />, 
+    description: 'Анализ резервуаров и водных объектов'
+  },
+  { 
+    id: 'impact_analysis', 
+    name: 'Анализ места прилета', 
+    icon: <GpsFixedIcon />, 
+    description: 'Анализ зон воздействия и повреждений'
   }
 ];
 

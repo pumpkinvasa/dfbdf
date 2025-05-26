@@ -207,12 +207,13 @@ const HomePage: React.FC = () => {
       const newSelection = isSelected 
         ? prev.filter(id => id !== searchId)
         : [...prev, searchId];
-      
-      // Показываем уведомление о выбранном типе поиска
+        // Показываем уведомление о выбранном типе поиска
       const searchNames = {
         trenches: 'Поиск окопов',
         fortifications: 'Поиск укрепов', 
-        buildings: 'Поиск построек'
+        buildings: 'Поиск построек',
+        reservoirs: 'Проверка резервуаров',
+        impact_analysis: 'Анализ места прилета'
       };
       
       const action = isSelected ? 'отключен' : 'включен';
@@ -235,12 +236,12 @@ const HomePage: React.FC = () => {
       setSnackbarMessage('Сначала нарисуйте область для анализа на карте');
       setSnackbarOpen(true);
       return;
-    }
-
-    const searchNames = {
+    }    const searchNames = {
       trenches: 'окопов',
       fortifications: 'укрепов', 
-      buildings: 'построек'
+      buildings: 'построек',
+      reservoirs: 'резервуаров',
+      impact_analysis: 'мест прилета'
     };
 
     const selectedTypes = selectedSearches.map(type => searchNames[type]).join(', ');
