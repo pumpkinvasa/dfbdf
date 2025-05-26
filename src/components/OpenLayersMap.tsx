@@ -33,6 +33,8 @@ export interface OpenLayersMapHandle {
   exportFeatures: () => any[];
   displayGeoReferencedImage: (imageData: string, worldFile: any) => void;
   togglePolygonsVisibility: () => void;
+  getPolygonImageBase64: () => Promise<string>;
+  replacePolygonImage: (base64Image: string) => void;
 }
 
 interface OpenLayersMapProps {
@@ -995,8 +997,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           console.error('Error creating image layer:', error);
           console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
         }
-      },
-      togglePolygonsVisibility: () => {
+      },      togglePolygonsVisibility: () => {
         if (vectorLayerRef.current && imageLayerRef.current) {
           // Переключаем видимость как векторного слоя, так и слоя изображения
           const currentVisibility = vectorLayerRef.current.getVisible();
@@ -1006,6 +1007,248 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           // Переключаем видимость только векторного слоя
           const currentVisibility = vectorLayerRef.current.getVisible();
           vectorLayerRef.current.setVisible(!currentVisibility);
+        }
+      },      getPolygonImageBase64: async (): Promise<string> => {
+        console.log('=== Начало извлечения изображения полигона ===');
+        return new Promise((resolve, reject) => {
+          console.log('Проверяем доступность карты и векторного источника...');
+          if (!mapInstanceRef.current || !vectorSourceRef.current) {
+            console.error('Карта или векторный источник недоступны');
+            reject(new Error('Map or vector source not available'));
+            return;
+          }
+
+          console.log('Получаем список объектов на карте...');
+          const features = vectorSourceRef.current.getFeatures();
+          console.log('Найдено объектов:', features.length);
+          
+          if (features.length === 0) {
+            console.error('На карте нет полигонов');
+            reject(new Error('No polygons found on the map'));
+            return;
+          }
+
+          // Берем последний нарисованный полигон
+          const lastFeature = features[features.length - 1];
+          const geometry = lastFeature.getGeometry();
+          console.log('Последний объект:', lastFeature);
+          console.log('Геометрия объекта:', geometry);
+
+          if (!geometry || !(geometry instanceof Polygon)) {
+            console.error('Последний объект не является полигоном');
+            reject(new Error('Last feature is not a polygon'));
+            return;
+          }
+
+          // Получаем экстент полигона
+          const polygonExtent = geometry.getExtent();
+          console.log('Экстент полигона:', polygonExtent);
+          
+          // Определяем размер изображения (фиксированный размер для сегментации)
+          const imageSize = 512; // Фиксированный размер для модели сегментации
+          
+          console.log('Создаем Canvas для извлечения изображения размером:', imageSize, 'x', imageSize);
+
+          // Создаем canvas для рендеринга изображения без фоновых слоев
+          const canvas = document.createElement('canvas');
+          canvas.width = imageSize;
+          canvas.height = imageSize;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            console.error('Не удалось получить контекст canvas');
+            reject(new Error('Could not get canvas context'));
+            return;
+          }
+
+          // Заливаем canvas черным цветом (фон для сегментации)
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, imageSize, imageSize);
+
+          console.log('Создаем временную карту для извлечения данных...');
+          
+          // Создаем временный div для рендеринга карты без базовых слоев
+          const tempDiv = document.createElement('div');
+          tempDiv.style.width = imageSize + 'px';
+          tempDiv.style.height = imageSize + 'px';
+          tempDiv.style.position = 'absolute';
+          tempDiv.style.left = '-9999px';
+          tempDiv.style.top = '-9999px';
+          document.body.appendChild(tempDiv);
+
+          // Получаем только слои с данными (исключаем базовые слои)
+          const dataLayers: any[] = [];
+          mapInstanceRef.current.getLayers().forEach((layer: any) => {
+            // Добавляем только векторные слои и слои изображений (не базовые тайловые слои)
+            if (layer === vectorLayerRef.current || layer === imageLayerRef.current) {
+              dataLayers.push(layer);
+            }
+          });
+
+          console.log('Найдено слоев с данными:', dataLayers.length);
+
+          // Создаем временную карту только с данными (без базовых слоев)
+          const tempMap = new Map({
+            target: tempDiv,
+            layers: dataLayers,
+            view: new View({
+              center: [(polygonExtent[0] + polygonExtent[2]) / 2, (polygonExtent[1] + polygonExtent[3]) / 2],
+              extent: polygonExtent,
+              resolution: Math.max(
+                (polygonExtent[2] - polygonExtent[0]) / imageSize,
+                (polygonExtent[3] - polygonExtent[1]) / imageSize
+              )
+            }),
+            controls: []
+          });
+
+          // Ждем рендеринга временной карты
+          tempMap.once('rendercomplete', () => {
+            console.log('Временная карта отрендерена');
+            
+            setTimeout(() => {
+              const tempCanvas = tempDiv.querySelector('canvas') as HTMLCanvasElement;
+              if (tempCanvas) {
+                console.log('Копируем данные из временной карты...');
+                
+                // Копируем содержимое временной карты
+                ctx.drawImage(tempCanvas, 0, 0, imageSize, imageSize);
+                
+                // Конвертируем в base64
+                console.log('Конвертируем в base64...');
+                const base64 = canvas.toDataURL('image/png').split(',')[1];
+                console.log('Base64 изображение создано, длина:', base64.length);
+                
+                // Очищаем временные элементы
+                document.body.removeChild(tempDiv);
+                tempMap.setTarget(undefined);
+                
+                console.log('=== Извлечение изображения завершено успешно ===');
+                resolve(base64);
+              } else {
+                console.error('Не удалось найти canvas временной карты');
+                document.body.removeChild(tempDiv);
+                tempMap.setTarget(undefined);
+                reject(new Error('Could not find temporary map canvas'));
+              }
+            }, 500); // Даем время на полную отрисовку
+          });
+
+          // Принудительно рендерим временную карту
+          tempMap.renderSync();
+        });
+      },replacePolygonImage: (base64Image: string) => {
+        console.log('=== Замена изображения полигона ===');
+        console.log('Длина base64 изображения:', base64Image?.length || 'undefined');
+        
+        if (!mapInstanceRef.current || !vectorSourceRef.current) {
+          console.error('Карта или векторный источник недоступны');
+          return;
+        }
+
+        const features = vectorSourceRef.current.getFeatures();
+        console.log('Найдено объектов на карте:', features.length);
+        
+        if (features.length === 0) {
+          console.error('На карте нет полигонов');
+          return;
+        }
+
+        // Берем последний нарисованный полигон
+        const lastFeature = features[features.length - 1];
+        const geometry = lastFeature.getGeometry();
+
+        if (!geometry || !(geometry instanceof Polygon)) {
+          console.error('Последний объект не является полигоном');
+          return;
+        }
+
+        // Очистить существующий слой изображения
+        console.log('Очищаем существующий слой изображения...');
+        clearImageLayer();
+
+        // Получаем экстент полигона
+        const polygonExtent = geometry.getExtent();
+        console.log('Экстент полигона для замены:', polygonExtent);        try {
+          // Создаем data URL из base64, проверяя на дублирование префикса
+          let imageUrl: string;
+          if (base64Image.startsWith('data:image/')) {
+            // Данные уже содержат data URL
+            imageUrl = base64Image;
+            console.log('Base64 уже содержит data URL префикс');
+          } else {
+            // Добавляем префикс к чистому base64
+            imageUrl = `data:image/png;base64,${base64Image}`;
+            console.log('Добавлен data URL префикс к base64');
+          }
+          console.log('Создан data URL для изображения');
+
+          // Получаем проекцию карты
+          const mapProjection = mapInstanceRef.current.getView().getProjection().getCode();
+          console.log('Проекция карты:', mapProjection);
+
+          // Создаем изображение для определения его размеров
+          const img = new Image();
+          img.onload = () => {
+            console.log('Размеры загруженного изображения:', img.width, 'x', img.height);
+            
+            // Вычисляем соотношение сторон
+            const imageAspectRatio = img.width / img.height;
+            const polygonWidth = polygonExtent[2] - polygonExtent[0];
+            const polygonHeight = polygonExtent[3] - polygonExtent[1];
+            const polygonAspectRatio = polygonWidth / polygonHeight;
+            
+            console.log('Соотношение сторон - изображение:', imageAspectRatio, 'полигон:', polygonAspectRatio);
+            
+            // Используем экстент полигона точно как есть
+            // Это сохранит изображение в той же области, что и был полигон
+            const finalExtent = polygonExtent;
+            
+            console.log('Итоговый экстент для изображения:', finalExtent);
+
+            // Создать новый слой изображения с точным экстентом полигона
+            const imageLayer = new ImageLayer({
+              source: new Static({
+                url: imageUrl,
+                imageExtent: finalExtent,
+                projection: mapProjection,
+              }),
+              opacity: 1.0,
+              zIndex: 50
+            });
+
+            console.log('Создан новый слой изображения с сохраненным размером');
+
+            // Добавляем слой изображения
+            mapInstanceRef.current?.addLayer(imageLayer);
+            imageLayerRef.current = imageLayer;
+
+            console.log('=== Замена изображения полигона завершена успешно ===');
+          };
+          
+          img.onerror = (error) => {
+            console.error('Ошибка загрузки изображения:', error);
+            
+            // Fallback: используем оригинальный метод
+            const imageLayer = new ImageLayer({
+              source: new Static({
+                url: imageUrl,
+                imageExtent: polygonExtent,
+                projection: mapProjection,
+              }),
+              opacity: 1.0,
+              zIndex: 50
+            });
+
+            mapInstanceRef.current?.addLayer(imageLayer);
+            imageLayerRef.current = imageLayer;
+            
+            console.log('=== Замена изображения завершена с fallback методом ===');
+          };
+            img.src = imageUrl;
+        } catch (error) {
+          console.error('=== Ошибка при замене изображения полигона ===');
+          console.error('Error details:', error);
         }
       }
     }),

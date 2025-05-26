@@ -222,10 +222,13 @@ const HomePage: React.FC = () => {
       
       return newSelection;
     });
-  }, []);
-
-  const handleStartAnalysis = useCallback(() => {
+  }, []);  const handleStartAnalysis = useCallback(async () => {
+    console.log('=== Запуск анализа ===');
+    console.log('Выбранные типы поиска:', selectedSearches);
+    console.log('Количество объектов на карте:', featureCount);
+    
     if (selectedSearches.length === 0) {
+      console.warn('Не выбраны типы поиска');
       setSnackbarMessage('Выберите хотя бы один тип поиска');
       setSnackbarOpen(true);
       return;
@@ -233,10 +236,13 @@ const HomePage: React.FC = () => {
 
     // Проверяем, есть ли области на карте
     if (featureCount === 0) {
+      console.warn('Нет объектов на карте');
       setSnackbarMessage('Сначала нарисуйте область для анализа на карте');
       setSnackbarOpen(true);
       return;
-    }    const searchNames = {
+    }
+
+    const searchNames = {
       trenches: 'окопов',
       fortifications: 'укрепов', 
       buildings: 'построек',
@@ -244,17 +250,172 @@ const HomePage: React.FC = () => {
       impact_analysis: 'мест прилета'
     };
 
-    const selectedTypes = selectedSearches.map(type => searchNames[type]).join(', ');
-    setSnackbarMessage(`Запущен анализ для поиска: ${selectedTypes}`);
-    setSnackbarOpen(true);
-    
     // Закрываем меню поиска
     setSearchMenuOpen(false);
     
-    // TODO: Здесь будет логика запуска анализа
-    console.log('Запуск анализа для типов:', selectedSearches);
-    console.log('Количество областей на карте:', featureCount);
+    try {
+      // Если выбран поиск окопов, запускаем сегментацию
+      if (selectedSearches.includes('trenches')) {
+        console.log('Запуск сегментации окопов...');
+        await handleTrenchesSegmentation();
+        console.log('Сегментация окопов завершена');
+      }
+      
+      // TODO: Добавить обработку других типов анализа
+      const selectedTypes = selectedSearches.map(type => searchNames[type]).join(', ');
+      console.log('Анализ завершен для типов:', selectedTypes);
+      setSnackbarMessage(`Запущен анализ для поиска: ${selectedTypes}`);
+      setSnackbarOpen(true);
+      
+    } catch (error) {
+      console.error('=== Ошибка при запуске анализа ===');
+      console.error('Error details:', error);
+      setSnackbarMessage(`Ошибка при запуске анализа: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+      setSnackbarOpen(true);
+    }
   }, [selectedSearches, featureCount]);
+  const handleTrenchesSegmentation = useCallback(async () => {
+    console.log('=== Начало сегментации окопов ===');
+    
+    if (!mapRef.current) {
+      console.error('MapRef не инициализирован');
+      setSnackbarMessage('Карта не инициализирована');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    console.log('MapRef успешно инициализирован');
+
+    try {
+      // Генерируем уникальный ID задачи
+      const taskId = uuidv4();
+      console.log('Сгенерирован taskId:', taskId);
+      
+      setIsAnalyzing(true);
+      setAnalysisProgress(0);
+      setAnalysisStatus('processing');
+      setAnalysisDetail('Получение изображения из области...');
+
+      // Получаем base64 изображение из активного полигона
+      let imageBase64: string;
+      
+      console.log('Проверяем наличие метода getPolygonImageBase64...');
+      if (mapRef.current.getPolygonImageBase64) {
+        console.log('Метод getPolygonImageBase64 найден, начинаем извлечение изображения...');
+        imageBase64 = await mapRef.current.getPolygonImageBase64();
+        console.log('Изображение извлечено, длина base64:', imageBase64?.length || 'undefined');
+      } else {
+        console.error('Метод getPolygonImageBase64 не найден в mapRef.current');
+        throw new Error('Метод получения изображения недоступен');
+      }
+
+      if (!imageBase64) {
+        console.error('Пустое изображение получено');
+        throw new Error('Не удалось получить изображение из области');
+      }
+
+      setAnalysisDetail('Отправка на сегментацию...');
+      setAnalysisProgress(25);
+
+      // Подключаемся к WebSocket для отслеживания прогресса
+      const ws = new WebSocket(`ws://localhost:8888/ws/${taskId}`);
+      wsRef.current = ws;      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('WebSocket message received:', data);
+        
+        if (data.status === 'completed') {
+          console.log('Сегментация завершена через WebSocket');
+          // Не устанавливаем isAnalyzing(false) здесь, 
+          // это будет сделано после успешной замены изображения
+          setAnalysisProgress(90);
+          setAnalysisStatus('completed');
+          setAnalysisDetail('Финализация результатов...');
+        } else if (data.status === 'processing') {
+          setAnalysisProgress(data.progress || 50);
+          setAnalysisStatus(data.status);
+          setAnalysisDetail(data.detail || 'Обработка...');
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setIsAnalyzing(false);
+        setAnalysisProgress(0);
+        setAnalysisStatus('processing');
+        setAnalysisDetail('');
+      };
+
+      // Ждем подключения WebSocket
+      await new Promise<void>((resolve, reject) => {
+        ws.onopen = () => resolve();
+        ws.onerror = () => reject(new Error('WebSocket connection failed'));
+        setTimeout(() => reject(new Error('WebSocket connection timeout')), 5000);
+      });
+
+      // Отправляем запрос на сегментацию
+      const response = await fetch(`http://localhost:8888/segment_trenches/${taskId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_base64: imageBase64
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Ошибка сегментации');
+      }      const result = await response.json();
+      
+      if (result.status === 'success' && result.result_image) {
+        setAnalysisDetail('Применение результатов...');
+        setAnalysisProgress(95);
+        
+        // Заменяем изображение на карте результатом сегментации
+        if (mapRef.current.replacePolygonImage) {
+          await mapRef.current.replacePolygonImage(result.result_image);
+        }
+        
+        // Завершаем процесс анализа
+        setAnalysisProgress(100);
+        setAnalysisDetail('Сегментация завершена');
+        
+        setTimeout(() => {
+          setIsAnalyzing(false);
+          setAnalysisProgress(0);
+          setAnalysisStatus('processing');
+          setAnalysisDetail('');
+          
+          // Закрываем WebSocket
+          if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+          }
+        }, 1500);
+        
+        setSnackbarMessage('Сегментация окопов завершена успешно');
+        setSnackbarOpen(true);
+      } else {
+        throw new Error(result.message || 'Неизвестная ошибка сегментации');
+      }
+
+    } catch (error) {
+      console.error('Ошибка сегментации окопов:', error);
+      setIsAnalyzing(false);
+      setAnalysisProgress(0);
+      setAnalysisStatus('processing');
+      setAnalysisDetail('');
+      
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      
+      setSnackbarMessage(`Ошибка сегментации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+      setSnackbarOpen(true);
+    }
+  }, []);
 
   const handleLayerSelect = useCallback((layerId: LayerType) => {
     setCurrentLayer(layerId);
