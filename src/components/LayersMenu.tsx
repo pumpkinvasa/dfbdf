@@ -113,9 +113,8 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
         justifyContent: 'space-between', 
         p: 1,
         flexShrink: 0 
-      }}>
-        <Typography variant="h6" sx={{ p: 1 }}>
-          Слои карты
+      }}>        <Typography variant="h6" sx={{ p: 1 }}>
+          Заполнение AOI
         </Typography>
         <IconButton onClick={onClose}>
           <ChevronRightIcon />

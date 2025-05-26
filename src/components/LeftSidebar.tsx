@@ -13,7 +13,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import LayersIcon from '@mui/icons-material/Layers';
-import TimelineIcon from '@mui/icons-material/Timeline';
+import FormatColorFillIcon from '@mui/icons-material/FormatColorFill';
 
 interface TabContent {
   title: string;
@@ -67,10 +67,9 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <p>Здесь вы можете выбрать различные слои для отображения на карте.</p>
         </Box>
       ),
-    },
-    {
+    },    {
       title: 'Композитные слои',
-      icon: <TimelineIcon />,
+      icon: <FormatColorFillIcon />,
       content: (
         <Box p={3}>
           <h5>Композитные слои</h5>

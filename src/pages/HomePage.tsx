@@ -14,7 +14,7 @@ import { ThemeContext } from '../ThemeContext';
 import LeftSidebar from '../components/LeftSidebar';
 import RightSidebar from '../components/RightSidebar';
 import LayersMenu, { LayerType } from '../components/LayersMenu';
-import CompositesMenu, { CompositeType } from '../components/CompositesMenu';
+import AOIMenu, { CompositeType, SatelliteType } from '../components/AOIMenu';
 import OpenLayersMap, { OpenLayersMapHandle } from '../components/OpenLayersMap';
 import SearchLocation from '../components/SearchLocation';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -38,10 +38,10 @@ const HomePage: React.FC = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [featureCount, setFeatureCount] = useState(0);
-  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
-  const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);  const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
   const [currentComposite, setCurrentComposite] = useState<CompositeType | null>(null);
+  const [currentSatellite, setCurrentSatellite] = useState<SatelliteType | null>(null);
   const [overlaySettings, setOverlaySettings] = useState({
     borders: false,
     contour: false,
@@ -352,6 +352,37 @@ const HomePage: React.FC = () => {
     
     setSnackbarOpen(true);
   }, [featureCount]);
+  // Handler for satellite selection
+  const handleSatelliteSelect = useCallback((satelliteId: SatelliteType) => {
+    setCurrentSatellite(satelliteId);
+    
+    // Check if there are any features on the map
+    if (featureCount === 0 && mapRef.current) {
+      // Show temporary rectangle if no features exist
+      mapRef.current.showTemporaryRectangle();
+      setSnackbarMessage(`Выбран спутник: ${satelliteId}. Создайте область интереса на карте.`);
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // If features exist, proceed with satellite data processing
+    setSnackbarMessage(`Выбран спутник: ${satelliteId}. Обработка области...`);
+    setSnackbarOpen(true);
+    
+    // TODO: Implement satellite data processing logic here
+    console.log('Processing satellite data for:', satelliteId);
+    console.log('Feature count:', featureCount);
+  }, [featureCount]);
+
+  // Handler for file upload
+  const handleFileUpload = useCallback((files: FileList) => {
+    const fileNames = Array.from(files).map(file => file.name).join(', ');
+    setSnackbarMessage(`Загружены файлы: ${fileNames}`);
+    setSnackbarOpen(true);
+    
+    // TODO: Implement actual file upload logic
+    console.log('Files uploaded:', files);
+  }, []);
 
   // Add handler for temporary rectangle confirmation
   const handleTemporaryRectangleConfirm = useCallback(() => {
@@ -477,12 +508,14 @@ const HomePage: React.FC = () => {
           onClose={handleLayersMenuClose}
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
-        />
-        <CompositesMenu
+        />        <AOIMenu
           open={compositesMenuOpen}
           onClose={handleCompositesMenuClose}
           onCompositeSelect={handleCompositeSelect}
+          onSatelliteSelect={handleSatelliteSelect}
+          onFileUpload={handleFileUpload}
           currentComposite={currentComposite}
+          currentSatellite={currentSatellite}
         />
       </Box>
       <Snackbar
