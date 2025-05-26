@@ -15,6 +15,7 @@ import LeftSidebar from '../components/LeftSidebar';
 import RightSidebar from '../components/RightSidebar';
 import LayersMenu, { LayerType } from '../components/LayersMenu';
 import AOIMenu, { CompositeType, SatelliteType } from '../components/AOIMenu';
+import SearchMenu, { SearchType } from '../components/SearchMenu';
 import OpenLayersMap, { OpenLayersMapHandle } from '../components/OpenLayersMap';
 import SearchLocation from '../components/SearchLocation';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -36,12 +37,13 @@ const HomePage: React.FC = () => {
   const [mapZoom, setMapZoom] = useState<number | undefined>(undefined);
   const [activeDrawingTool, setActiveDrawingTool] = useState<'polygon' | 'rectangle' | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [featureCount, setFeatureCount] = useState(0);
+  const [snackbarMessage, setSnackbarMessage] = useState('');  const [featureCount, setFeatureCount] = useState(0);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);  const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
+  const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
   const [currentComposite, setCurrentComposite] = useState<CompositeType | null>(null);
   const [currentSatellite, setCurrentSatellite] = useState<SatelliteType | null>(null);
+  const [selectedSearches, setSelectedSearches] = useState<SearchType[]>([]);
   const [overlaySettings, setOverlaySettings] = useState({
     borders: false,
     contour: false,
@@ -170,10 +172,16 @@ const HomePage: React.FC = () => {
     setLayersMenuOpen(true);
     setCompositesMenuOpen(false);
   }, []);
-
   const handleCompositesClick = useCallback(() => {
     setCompositesMenuOpen(true);
     setLayersMenuOpen(false);
+    setSearchMenuOpen(false);
+  }, []);
+
+  const handleSearchClick = useCallback(() => {
+    setSearchMenuOpen(true);
+    setLayersMenuOpen(false);
+    setCompositesMenuOpen(false);
   }, []);
 
   const handleLayersMenuClose = useCallback(() => {
@@ -186,10 +194,66 @@ const HomePage: React.FC = () => {
       }
     }
   }, [activeDrawingTool]);
-
   const handleCompositesMenuClose = useCallback(() => {
     setCompositesMenuOpen(false);
   }, []);
+
+  const handleSearchMenuClose = useCallback(() => {
+    setSearchMenuOpen(false);
+  }, []);
+  const handleSearchSelect = useCallback((searchId: SearchType) => {
+    setSelectedSearches(prev => {
+      const isSelected = prev.includes(searchId);
+      const newSelection = isSelected 
+        ? prev.filter(id => id !== searchId)
+        : [...prev, searchId];
+      
+      // Показываем уведомление о выбранном типе поиска
+      const searchNames = {
+        trenches: 'Поиск окопов',
+        fortifications: 'Поиск укрепов', 
+        buildings: 'Поиск построек'
+      };
+      
+      const action = isSelected ? 'отключен' : 'включен';
+      setSnackbarMessage(`${searchNames[searchId]} ${action}`);
+      setSnackbarOpen(true);
+      
+      return newSelection;
+    });
+  }, []);
+
+  const handleStartAnalysis = useCallback(() => {
+    if (selectedSearches.length === 0) {
+      setSnackbarMessage('Выберите хотя бы один тип поиска');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Проверяем, есть ли области на карте
+    if (featureCount === 0) {
+      setSnackbarMessage('Сначала нарисуйте область для анализа на карте');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const searchNames = {
+      trenches: 'окопов',
+      fortifications: 'укрепов', 
+      buildings: 'построек'
+    };
+
+    const selectedTypes = selectedSearches.map(type => searchNames[type]).join(', ');
+    setSnackbarMessage(`Запущен анализ для поиска: ${selectedTypes}`);
+    setSnackbarOpen(true);
+    
+    // Закрываем меню поиска
+    setSearchMenuOpen(false);
+    
+    // TODO: Здесь будет логика запуска анализа
+    console.log('Запуск анализа для типов:', selectedSearches);
+    console.log('Количество областей на карте:', featureCount);
+  }, [selectedSearches, featureCount]);
 
   const handleLayerSelect = useCallback((layerId: LayerType) => {
     setCurrentLayer(layerId);
@@ -475,12 +539,13 @@ const HomePage: React.FC = () => {
           mt: '64px',
           overflow: 'hidden',
         }}
-      >
-        <LeftSidebar 
+      >        <LeftSidebar 
           onLayersClick={handleLayersClick}
           onCompositesClick={handleCompositesClick}
+          onSearchClick={handleSearchClick}
           layersMenuOpen={layersMenuOpen}
           compositesMenuOpen={compositesMenuOpen}
+          searchMenuOpen={searchMenuOpen}
         />
         <Box
           sx={{
@@ -532,6 +597,12 @@ const HomePage: React.FC = () => {
           onFileUpload={handleFileUpload}
           currentComposite={currentComposite}
           currentSatellite={currentSatellite}
+        />        <SearchMenu
+          open={searchMenuOpen}
+          onClose={handleSearchMenuClose}
+          onSearchSelect={handleSearchSelect}
+          selectedSearches={selectedSearches}
+          onStartAnalysis={handleStartAnalysis}
         />
       </Box>
       <Snackbar

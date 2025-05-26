@@ -24,19 +24,22 @@ interface TabContent {
 interface LeftSidebarProps {
   onLayersClick?: () => void;
   onCompositesClick?: () => void;
+  onSearchClick?: () => void;
   layersMenuOpen?: boolean;
   compositesMenuOpen?: boolean;
+  searchMenuOpen?: boolean;
 }
 
 const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
   onLayersClick, 
   onCompositesClick,
+  onSearchClick,
   layersMenuOpen,
-  compositesMenuOpen 
+  compositesMenuOpen,
+  searchMenuOpen
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
   const theme = useTheme();
-
   // Сбрасываем выделение кнопки при закрытии соответствующего меню
   useEffect(() => {
     if (!layersMenuOpen && selectedTab === 1) {
@@ -45,7 +48,10 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     if (!compositesMenuOpen && selectedTab === 2) {
       setSelectedTab(0);
     }
-  }, [layersMenuOpen, compositesMenuOpen, selectedTab]);
+    if (!searchMenuOpen && selectedTab === 3) {
+      setSelectedTab(0);
+    }
+  }, [layersMenuOpen, compositesMenuOpen, searchMenuOpen, selectedTab]);
 
   const tabs: TabContent[] = [
     {
@@ -138,8 +144,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
             {tabs.map((tab, index) => (
               <Tooltip key={index} title={tab.title} placement="right">
                 <ListItemButton
-                  selected={selectedTab === index}
-                  onClick={() => {
+                  selected={selectedTab === index}                  onClick={() => {
                     setSelectedTab(index);
                     // Если это кнопка слоев (индекс 1), вызываем onLayersClick
                     if (index === 1 && onLayersClick) {
@@ -148,6 +153,10 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                     // Если это кнопка композитов (индекс 2), вызываем onCompositesClick
                     if (index === 2 && onCompositesClick) {
                       onCompositesClick();
+                    }
+                    // Если это кнопка анализа (индекс 3), вызываем onSearchClick
+                    if (index === 3 && onSearchClick) {
+                      onSearchClick();
                     }
                   }}
                   sx={{
