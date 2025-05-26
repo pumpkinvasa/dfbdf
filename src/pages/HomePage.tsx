@@ -49,6 +49,7 @@ const HomePage: React.FC = () => {
     roads: false
   });  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [hasTemporaryRectangle, setHasTemporaryRectangle] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState<string>('processing');
   const [analysisDetail, setAnalysisDetail] = useState<string>('');
   const [polygonCenter, setPolygonCenter] = useState<[number, number] | null>(null);
@@ -147,8 +148,7 @@ const HomePage: React.FC = () => {
 
   const handleFeatureCountChange = useCallback((count: number) => {
     setFeatureCount(count);
-  }, []);
-  const handleClearAllFeatures = useCallback(() => {
+  }, []);  const handleClearAllFeatures = useCallback(() => {
     if (mapRef.current) {
       if (mapRef.current.clearAllFeatures) {
         mapRef.current.clearAllFeatures();
@@ -157,6 +157,7 @@ const HomePage: React.FC = () => {
       if (mapRef.current.clearTemporaryRectangle) {
         mapRef.current.clearTemporaryRectangle();
       }
+      setHasTemporaryRectangle(false);
       setSnackbarMessage('Все объекты удалены');
       setSnackbarOpen(true);
     }
@@ -235,7 +236,6 @@ const HomePage: React.FC = () => {
       }
     });
   }, [handleProgressUpdate]);
-
   const handleCompositeSelect = useCallback(async (compositeId: CompositeType) => {
     setCurrentComposite(compositeId);
     
@@ -243,6 +243,16 @@ const HomePage: React.FC = () => {
     if (featureCount === 0 && mapRef.current) {
       // Show temporary rectangle if no features exist
       mapRef.current.showTemporaryRectangle();
+      setHasTemporaryRectangle(true);
+      setSnackbarMessage('Нарисована предлагаемая область. Нажмите "Применить" для подтверждения или нарисуйте свою область.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Prevent analysis if there's a temporary rectangle waiting for confirmation
+    if (hasTemporaryRectangle) {
+      setSnackbarMessage('Сначала примените предложенную область или нарисуйте свою область.');
+      setSnackbarOpen(true);
       return;
     }
 
@@ -347,12 +357,10 @@ const HomePage: React.FC = () => {
           wsRef.current = null;
         }
         setSnackbarMessage('Ошибка при отправке данных');
-      }
-    }
+      }    }
     
     setSnackbarOpen(true);
-  }, [featureCount]);
-  // Handler for satellite selection
+  }, [featureCount, hasTemporaryRectangle]);  // Handler for satellite selection
   const handleSatelliteSelect = useCallback((satelliteId: SatelliteType) => {
     setCurrentSatellite(satelliteId);
     
@@ -360,7 +368,15 @@ const HomePage: React.FC = () => {
     if (featureCount === 0 && mapRef.current) {
       // Show temporary rectangle if no features exist
       mapRef.current.showTemporaryRectangle();
-      setSnackbarMessage(`Выбран спутник: ${satelliteId}. Создайте область интереса на карте.`);
+      setHasTemporaryRectangle(true);
+      setSnackbarMessage(`Выбран спутник: ${satelliteId}. Нарисована предлагаемая область. Нажмите "Применить" для подтверждения или нарисуйте свою область.`);
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Prevent processing if there's a temporary rectangle waiting for confirmation
+    if (hasTemporaryRectangle) {
+      setSnackbarMessage('Сначала примените предложенную область или нарисуйте свою область.');
       setSnackbarOpen(true);
       return;
     }
@@ -372,7 +388,7 @@ const HomePage: React.FC = () => {
     // TODO: Implement satellite data processing logic here
     console.log('Processing satellite data for:', satelliteId);
     console.log('Feature count:', featureCount);
-  }, [featureCount]);
+  }, [featureCount, hasTemporaryRectangle]);
 
   // Handler for file upload
   const handleFileUpload = useCallback((files: FileList) => {
@@ -383,13 +399,13 @@ const HomePage: React.FC = () => {
     // TODO: Implement actual file upload logic
     console.log('Files uploaded:', files);
   }, []);
-
   // Add handler for temporary rectangle confirmation
   const handleTemporaryRectangleConfirm = useCallback(() => {
     // Clear the temporary rectangle
     if (mapRef.current) {
       mapRef.current.clearTemporaryRectangle();
     }
+    setHasTemporaryRectangle(false);
     setSnackbarMessage('Область анализа подтверждена');
     setSnackbarOpen(true);
   }, []);

@@ -10,8 +10,8 @@ import {
   Tooltip
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import SettingsIcon from '@mui/icons-material/Settings';
-import NotificationsIcon from '@mui/icons-material/Notifications';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import LayersIcon from '@mui/icons-material/Layers';
 import FormatColorFillIcon from '@mui/icons-material/FormatColorFill';
 
@@ -76,23 +76,22 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <p>Анализ изменений и композитные слои.</p>
         </Box>
       ),
-    },
-    {
-      title: 'Уведомления',
-      icon: <NotificationsIcon />,
+    },    {
+      title: 'Анализ',
+      icon: <AutoAwesomeIcon />,
       content: (
         <Box p={3}>
-          <h5>Уведомления</h5>
+          <h5>Анализ</h5>
           <p>Здесь можно увидеть все ваши уведомления и обновления системы.</p>
         </Box>
       ),
     },
     {
-      title: 'Настройки',
-      icon: <SettingsIcon />,
+      title: 'Workflow',
+      icon: <AccountTreeIcon />,
       content: (
         <Box p={3}>
-          <h5>Настройки</h5>
+          <h5>Workflow</h5>
           <p>Здесь вы можете настроить параметры приложения под свои предпочтения.</p>
         </Box>
       ),
