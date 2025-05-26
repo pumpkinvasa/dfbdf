@@ -14,21 +14,27 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import PolylineIcon from '@mui/icons-material/Polyline';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 
 interface RightSidebarProps {
   onToolSelect?: (toolIndex: number) => void;
   onDrawingToolSelect?: (tool: 'polygon' | 'rectangle' | 'upload') => void;
   onClearAllFeatures?: () => void;
+  onToggleVisibility?: () => void;
   activeDrawingTool: string | null;
   hasFeatures: boolean;
+  polygonsVisible: boolean;
 }
 
 const RightSidebar: React.FC<RightSidebarProps> = ({ 
   onToolSelect, 
   onDrawingToolSelect,
   onClearAllFeatures,
+  onToggleVisibility,
   activeDrawingTool,
-  hasFeatures
+  hasFeatures,
+  polygonsVisible
 }) => {
   const [activeToolIndex, setActiveToolIndex] = useState<number | null>(null);
   const [drawingMenuOpen, setDrawingMenuOpen] = useState(false);
@@ -41,11 +47,14 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     { name: "Инструмент 2", icon: <CloseIcon fontSize="small" /> },
     { name: "Инструмент 3", icon: <CloseIcon fontSize="small" /> },
     { name: "Инструмент 4", icon: <CloseIcon fontSize="small" /> },
-  ];
-  
-  // Список инструментов рисования
+  ];    // Список инструментов рисования
   const drawingTools = [
     ...(hasFeatures ? [{ name: "Очистить все", icon: <DeleteIcon fontSize="small" />, type: 'clear' as const }] : []),
+    ...(hasFeatures ? [{ 
+      name: polygonsVisible ? "Скрыть полигоны" : "Показать полигоны", 
+      icon: polygonsVisible ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />, 
+      type: 'toggle-visibility' as const 
+    }] : []),
     { name: "Нарисовать полигон точками", icon: <CreateIcon fontSize="small" />, type: 'polygon' as const },
     { name: "Нарисовать прямоугольник", icon: <CropSquareIcon fontSize="small" />, type: 'rectangle' as const },
     { name: "Загрузить GeoJSON", icon: <CloudUploadIcon fontSize="small" />, type: 'upload' as const },
@@ -93,12 +102,15 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
       }
     }
   };
-  
-  // Обработчик выбора инструмента рисования
-  const handleDrawingToolClick = (type: 'polygon' | 'rectangle' | 'upload' | 'clear') => {
+    // Обработчик выбора инструмента рисования
+  const handleDrawingToolClick = (type: 'polygon' | 'rectangle' | 'upload' | 'clear' | 'toggle-visibility') => {
     if (type === 'clear') {
       if (onClearAllFeatures) onClearAllFeatures();
       // Оставляем меню открытым после очистки
+      setDrawingMenuOpen(true);
+    } else if (type === 'toggle-visibility') {
+      if (onToggleVisibility) onToggleVisibility();
+      // Оставляем меню открытым после переключения видимости
       setDrawingMenuOpen(true);
     } else {
       if (onDrawingToolSelect) onDrawingToolSelect(type);

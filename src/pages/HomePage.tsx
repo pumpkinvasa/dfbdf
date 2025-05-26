@@ -49,7 +49,10 @@ const HomePage: React.FC = () => {
     roads: false
   });  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState<string>('processing');
+  const [analysisDetail, setAnalysisDetail] = useState<string>('');
   const [polygonCenter, setPolygonCenter] = useState<[number, number] | null>(null);
+  const [polygonsVisible, setPolygonsVisible] = useState(true);
   const wsRef = useRef<WebSocket | null>(null);
   const mapRef = useRef<OpenLayersMapHandle>(null);
 
@@ -192,16 +195,26 @@ const HomePage: React.FC = () => {
     setSnackbarMessage(`Выбран слой: ${layerId}`);
     setSnackbarOpen(true);
   }, []);
-
-  const handleProgressUpdate = useCallback(async (progressData: { status: string; progress: number }) => {
+  const handleProgressUpdate = useCallback(async (progressData: { 
+    status: string; 
+    progress: number; 
+    detail?: string; 
+  }) => {
+    console.log('Progress update received:', progressData); // Debug log
+    
     if (progressData.status === 'completed') {
       setIsAnalyzing(false);
       setAnalysisProgress(100);
+      setAnalysisStatus('completed');
+      setAnalysisDetail('');
       setTimeout(() => {
         setAnalysisProgress(0);
+        setAnalysisStatus('processing');
       }, 1000);
-    } else if (progressData.status === 'processing') {
+    } else if (['processing', 'downloading', 'generating'].includes(progressData.status)) {
       setAnalysisProgress(progressData.progress);
+      setAnalysisStatus(progressData.status);
+      setAnalysisDetail(progressData.detail || '');
     }
   }, []);
   // Setup progress endpoint
@@ -245,6 +258,8 @@ const HomePage: React.FC = () => {
       }      try {
         setIsAnalyzing(true);
         setAnalysisProgress(0);
+        setAnalysisStatus('processing');
+        setAnalysisDetail('');
         
         // Автоматически закрываем меню композитов при начале обработки
         setCompositesMenuOpen(false);
@@ -257,9 +272,13 @@ const HomePage: React.FC = () => {
         const ws = new WebSocket(`ws://localhost:8888/ws/${taskId}`);
         wsRef.current = ws;        ws.onmessage = (event) => {
           const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data); // Debug log
+          
           if (data.status === 'completed') {
             setIsAnalyzing(false);
             setAnalysisProgress(100);
+            setAnalysisStatus('completed');
+            setAnalysisDetail('');
             
             // Display the georeferenced image
             if (data.result && data.result.image && data.result.worldFile && mapRef.current) {
@@ -268,21 +287,25 @@ const HomePage: React.FC = () => {
             
             setTimeout(() => {
               setAnalysisProgress(0);
+              setAnalysisStatus('processing');
               if (wsRef.current) {
                 wsRef.current.close();
                 wsRef.current = null;
               }
             }, 1000);
-          } else if (data.status === 'processing') {
-            setAnalysisProgress(data.progress);
+          } else if (data.status === 'processing' || data.status === 'downloading' || data.status === 'generating') {
+            setAnalysisProgress(data.progress || 0);
+            setAnalysisStatus(data.status);
+            setAnalysisDetail(data.detail || '');
           }
-        };
-
-        ws.onerror = (error) => {
+        };        ws.onerror = (error) => {
           console.error('WebSocket error:', error);
           setSnackbarMessage('Ошибка соединения с сервером');
           setSnackbarOpen(true);
           setIsAnalyzing(false);
+          setAnalysisProgress(0);
+          setAnalysisStatus('processing');
+          setAnalysisDetail('');
         };
 
         // Wait for WebSocket connection
@@ -313,11 +336,12 @@ const HomePage: React.FC = () => {
           const errorData = await response.json();
           console.error('Server error:', errorData); // Debug log
           throw new Error(errorData.detail || 'Failed to start analysis');
-        }
-      } catch (error) {
+        }      } catch (error) {
         console.error('Error:', error);
         setIsAnalyzing(false);
         setAnalysisProgress(0);
+        setAnalysisStatus('processing');
+        setAnalysisDetail('');
         if (wsRef.current) {
           wsRef.current.close();
           wsRef.current = null;
@@ -346,10 +370,19 @@ const HomePage: React.FC = () => {
     setSnackbarMessage(`${checked ? 'Включен' : 'Выключен'} слой: ${overlay}`);
     setSnackbarOpen(true);
   }, []);
-
   const handlePolygonCenterChange = useCallback((center: [number, number] | null) => {
     setPolygonCenter(center);
   }, []);
+
+  const handleToggleVisibility = useCallback(() => {
+    if (mapRef.current && mapRef.current.togglePolygonsVisibility) {
+      mapRef.current.togglePolygonsVisibility();
+      setPolygonsVisible(prev => !prev);
+      const message = polygonsVisible ? 'Полигоны скрыты' : 'Полигоны показаны';
+      setSnackbarMessage(message);
+      setSnackbarOpen(true);
+    }
+  }, [polygonsVisible]);
 
   return (
     <Box
@@ -427,14 +460,17 @@ const HomePage: React.FC = () => {
             progress={analysisProgress}
             visible={isAnalyzing}
             polygonCenter={polygonCenter}
+            status={analysisStatus}
+            detail={analysisDetail}
           />
-        </Box>
-        <RightSidebar
+        </Box>        <RightSidebar
           onToolSelect={handleToolSelect}
           onDrawingToolSelect={handleDrawingToolSelect}
           onClearAllFeatures={handleClearAllFeatures}
           activeDrawingTool={activeDrawingTool}
           hasFeatures={featureCount > 0}
+          onToggleVisibility={handleToggleVisibility}
+          polygonsVisible={polygonsVisible}
         />
         <LayersMenu
           open={layersMenuOpen}

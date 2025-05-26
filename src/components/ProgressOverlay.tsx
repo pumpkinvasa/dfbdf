@@ -5,9 +5,17 @@ interface ProgressOverlayProps {
   progress: number;
   visible: boolean;
   polygonCenter?: [number, number] | null; // Координаты центра полигона в пикселях
+  status?: string; // Статус выполнения (например, "downloading", "processing")
+  detail?: string; // Детальная информация (например, "B04 2025-05")
 }
 
-const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, visible, polygonCenter }) => {
+const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ 
+  progress, 
+  visible, 
+  polygonCenter, 
+  status = 'processing', 
+  detail 
+}) => {
   if (!visible) return null;
 
   // Определяем позицию: либо центр полигона, либо центр экрана
@@ -37,8 +45,7 @@ const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, visible, po
         gap: 2,
         zIndex: 1000,
       }}
-    >
-      <CircularProgress
+    >      <CircularProgress
         variant="determinate"
         value={progress}
         size={60}
@@ -46,9 +53,25 @@ const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, visible, po
         sx={{
           color: 'primary.main',
         }}
-      />      <Typography variant="h6" color="white">
-        {`Генерация композита: ${progress}%`}
+      />
+      
+      <Typography variant="h6" color="white" sx={{ textAlign: 'center' }}>
+        {status === 'downloading' && 'Загрузка данных'}
+        {status === 'processing' && 'Обработка данных'}
+        {status === 'generating' && 'Генерация композита'}
+        {status === 'completed' && 'Завершено'}
+        {!['downloading', 'processing', 'generating', 'completed'].includes(status) && 'Выполнение'}
       </Typography>
+      
+      <Typography variant="body1" color="white" sx={{ textAlign: 'center' }}>
+        {`${Math.round(progress)}%`}
+      </Typography>
+      
+      {detail && (
+        <Typography variant="body2" color="rgba(255, 255, 255, 0.8)" sx={{ textAlign: 'center' }}>
+          {detail}
+        </Typography>
+      )}
     </Box>
   );
 };

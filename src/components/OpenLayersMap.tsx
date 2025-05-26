@@ -32,6 +32,7 @@ export interface OpenLayersMapHandle {
   clearTemporaryRectangle: () => void;
   exportFeatures: () => any[];
   displayGeoReferencedImage: (imageData: string, worldFile: any) => void;
+  togglePolygonsVisibility: () => void;
 }
 
 interface OpenLayersMapProps {
@@ -990,10 +991,21 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             console.log('Image layer visibility:', imageLayer.getVisible());
             console.log('Image layer opacity:', imageLayer.getOpacity());
           }, 100);
-          
-        } catch (error) {
+            } catch (error) {
           console.error('Error creating image layer:', error);
           console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        }
+      },
+      togglePolygonsVisibility: () => {
+        if (vectorLayerRef.current && imageLayerRef.current) {
+          // Переключаем видимость как векторного слоя, так и слоя изображения
+          const currentVisibility = vectorLayerRef.current.getVisible();
+          vectorLayerRef.current.setVisible(!currentVisibility);
+          imageLayerRef.current.setVisible(!currentVisibility);
+        } else if (vectorLayerRef.current) {
+          // Переключаем видимость только векторного слоя
+          const currentVisibility = vectorLayerRef.current.getVisible();
+          vectorLayerRef.current.setVisible(!currentVisibility);
         }
       }
     }),
