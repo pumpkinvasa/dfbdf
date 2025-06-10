@@ -20,6 +20,9 @@ import SatelliteIcon from '@mui/icons-material/Satellite';
 import GeoJSON from 'ol/format/GeoJSON';
 import { getArea } from 'ol/sphere';
 import Polygon from 'ol/geom/Polygon';
+import DeleteIcon from '@mui/icons-material/Delete';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 
 export type LayerType = 
   | 'OSM' 
@@ -43,6 +46,9 @@ interface LayersMenuProps {
   currentLayer: LayerType;
   aoiPolygons?: any[];
   onPolygonSelect?: (polygonIndex: number) => void;
+  onPolygonToggleVisibility?: (polygonIndex: number) => void;
+  onPolygonDelete?: (polygonIndex: number) => void;
+  polygonVisibility?: boolean[];
 }
 
 const layerOptions: Layer[] = [
@@ -90,7 +96,10 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
   onLayerSelect, 
   currentLayer,
   aoiPolygons = [],
-  onPolygonSelect
+  onPolygonSelect,
+  onPolygonToggleVisibility,
+  onPolygonDelete,
+  polygonVisibility = []
 }) => {
   const theme = useTheme();
 
@@ -209,6 +218,11 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
                   areaText = 'Ошибка расчета';
                 }
 
+                const isVisible = polygonVisibility[index] !== false;
+
+                // Цвет иконок как в райт сайдбаре
+                const iconColor = theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main;
+
                 return (
                   <ListItemButton
                     key={index}
@@ -218,7 +232,9 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
                       borderRadius: 1,
                       '&:hover': {
                         bgcolor: theme.palette.action.hover,
-                      }
+                      },
+                      display: 'flex',
+                      alignItems: 'center',
                     }}
                   >
                     <ListItemIcon>
@@ -228,6 +244,26 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
                       primary={`Полигон AOI ${index + 1}`}
                       secondary={areaText}
                     />
+                    <IconButton
+                      size="small"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onPolygonToggleVisibility?.(index);
+                      }}
+                      sx={{ ml: 1, color: iconColor }}
+                    >
+                      {isVisible ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onPolygonDelete?.(index);
+                      }}
+                      sx={{ ml: 0.5, color: iconColor }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </ListItemButton>
                 );
               })

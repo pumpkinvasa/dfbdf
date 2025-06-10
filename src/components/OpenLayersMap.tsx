@@ -37,6 +37,8 @@ export interface OpenLayersMapHandle {
   replacePolygonImage: (base64Image: string) => void;
   navigateToPolygon: (index: number) => void;
   getLoadedPolygons: () => any[];
+  removePolygonByIndex: (index: number) => void;
+  setPolygonVisibilityByIndex: (index: number, visible: boolean) => void;
 }
 
 interface OpenLayersMapProps {
@@ -790,7 +792,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
   }, []);
   // Экспонируем функции через ref
   useImperativeHandle(
-    ref,    () => ({      loadGeoJSON: (geoJSON: any, onPolygonsLoaded?: (polygons: any[]) => void, colorByHealth: boolean = false) => {
+    ref,
+    () => ({
+      loadGeoJSON: (geoJSON: any, onPolygonsLoaded?: (polygons: any[]) => void, colorByHealth: boolean = false) => {
         console.log('=== Loading GeoJSON ===');
         console.log('GeoJSON data:', geoJSON);
         
@@ -1123,7 +1127,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           
           console.log('=== Image layer successfully placed within polygon ===');
           
-          // Дополнительная проверка видимости слоя
+          // Дополнительная проверка слоя изображения
           setTimeout(() => {
             const layers = mapInstanceRef.current?.getLayers();
             const hasImageLayer = layers?.getArray().includes(imageLayer);
@@ -1275,7 +1279,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           // Принудительно рендерим временную карту
           tempMap.renderSync();
         });
-      },replacePolygonImage: (base64Image: string) => {
+      },      replacePolygonImage: (base64Image: string) => {
         console.log('=== Замена изображения полигона ===');
         console.log('Длина base64 изображения:', base64Image?.length || 'undefined');
         
@@ -1423,7 +1427,24 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             featureProjection: 'EPSG:3857',
           })
         );
-      }
+      },
+      removePolygonByIndex: (index: number) => {
+        if (!vectorSourceRef.current) return;
+        const features = vectorSourceRef.current.getFeatures();
+        if (index < 0 || index >= features.length) return;
+        vectorSourceRef.current.removeFeature(features[index]);
+      },
+      setPolygonVisibilityByIndex: (index: number, visible: boolean) => {
+        if (!vectorSourceRef.current) return;
+        const features = vectorSourceRef.current.getFeatures();
+        if (index < 0 || index >= features.length) return;
+        const feature = features[index];
+        if (visible) {
+          feature.setStyle(createVectorStyle()(feature));
+        } else {
+          feature.setStyle(() => undefined); // скрыть
+        }
+      },
     }),
     [showTemporaryRectangle, clearTemporaryRectangle, clearImageLayer, worldFileToExtent],
   );

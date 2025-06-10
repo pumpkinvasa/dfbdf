@@ -847,6 +847,31 @@ const HomePage: React.FC = () => {
     }
   }, [polygonsVisible]);
 
+  const [polygonVisibility, setPolygonVisibility] = useState<boolean[]>([]);
+
+  // Сброс видимости при изменении списка полигонов
+  useEffect(() => {
+    setPolygonVisibility(aoiPolygons.map(() => true));
+  }, [aoiPolygons.length]);
+
+  const handlePolygonToggleVisibility = useCallback((polygonIndex: number) => {
+    setPolygonVisibility(prev => {
+      const newVis = prev.map((v, i) => i === polygonIndex ? !v : v);
+      if (mapRef.current && mapRef.current.setPolygonVisibilityByIndex) {
+        mapRef.current.setPolygonVisibilityByIndex(polygonIndex, newVis[polygonIndex]);
+      }
+      return newVis;
+    });
+  }, [mapRef]);
+
+  const handlePolygonDelete = useCallback((polygonIndex: number) => {
+    if (mapRef.current && mapRef.current.removePolygonByIndex) {
+      mapRef.current.removePolygonByIndex(polygonIndex);
+      setSnackbarMessage('Полигон удалён');
+      setSnackbarOpen(true);
+    }
+  }, [mapRef]);
+
   return (
     <Box
       sx={{
@@ -942,6 +967,9 @@ const HomePage: React.FC = () => {
           currentLayer={currentLayer}
           aoiPolygons={aoiPolygons}
           onPolygonSelect={handlePolygonSelect}
+          onPolygonToggleVisibility={handlePolygonToggleVisibility}
+          onPolygonDelete={handlePolygonDelete}
+          polygonVisibility={polygonVisibility}
         /><AOIMenu
           open={compositesMenuOpen}
           onClose={handleCompositesMenuClose}
