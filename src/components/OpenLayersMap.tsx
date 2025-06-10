@@ -39,6 +39,7 @@ export interface OpenLayersMapHandle {
   getLoadedPolygons: () => any[];
   removePolygonByIndex: (index: number) => void;
   setPolygonVisibilityByIndex: (index: number, visible: boolean) => void;
+  setPolygonHoverByIndex: (index: number, hovered: boolean) => void; // Новая функция для установки наведения
 }
 
 interface OpenLayersMapProps {
@@ -96,14 +97,31 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       contour?: TileLayer;
       labels?: TileLayer;
       roads?: TileLayer;
-    }>({});
-    const currentZoomRef = useRef<number>(initialZoom);
+    }>({});    const currentZoomRef = useRef<number>(initialZoom);
     const currentCenterRef = useRef<[number, number]>(initialCenter);
     const theme = useTheme();
-    const temporaryFeatureRef = useRef<Feature | null>(null);    const overlayRef = useRef<Overlay | null>(null);
+    const temporaryFeatureRef = useRef<Feature | null>(null);
+    const overlayRef = useRef<Overlay | null>(null);
     const temporaryDivRef = useRef<HTMLDivElement | null>(null);
     const imageLayerRef = useRef<ImageLayer<Static> | null>(null);
-    const loadedPolygonsRef = useRef<Feature[]>([]);// Function to clear existing image layer
+    const loadedPolygonsRef = useRef<Feature[]>([]);
+    
+    // Дебаунсинг для обновления центра полигона
+    const updatePolygonCenterDebounced = useCallback(() => {
+      if (onPolygonCenterChange) {
+        const polygonCenter = calculatePolygonCenterInPixels();
+        onPolygonCenterChange(polygonCenter);
+      }
+    }, [onPolygonCenterChange]);
+
+    // Создаем дебаунсированную версию функции
+    const debouncedUpdateRef = useRef<NodeJS.Timeout | null>(null);
+    const schedulePolygonCenterUpdate = useCallback(() => {
+      if (debouncedUpdateRef.current) {
+        clearTimeout(debouncedUpdateRef.current);
+      }
+      debouncedUpdateRef.current = setTimeout(updatePolygonCenterDebounced, 16); // ~60fps
+    }, [updatePolygonCenterDebounced]);// Function to clear existing image layer
     const clearImageLayer = useCallback(() => {
       if (imageLayerRef.current && mapInstanceRef.current) {
         console.log('Clearing existing image layer');
@@ -120,7 +138,12 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           }
         }
       }
-    }, []);
+    }, []);    // Кэш для центра полигона
+    const polygonCenterCacheRef = useRef<{
+      featuresCount: number;
+      center: [number, number] | null;
+      viewState: string;
+    }>({ featuresCount: 0, center: null, viewState: '' });
 
     // Function to calculate polygon center and convert to screen coordinates
     const calculatePolygonCenterInPixels = useCallback(() => {
@@ -128,6 +151,16 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       const features = vectorSourceRef.current.getFeatures();
       if (features.length === 0) return null;
+
+      // Создаем ключ состояния вида для кэширования
+      const view = mapInstanceRef.current.getView();
+      const viewState = `${view.getCenter()?.join(',')}_${view.getResolution()}`;
+      const cache = polygonCenterCacheRef.current;
+
+      // Проверяем кэш
+      if (cache.featuresCount === features.length && cache.viewState === viewState && cache.center) {
+        return cache.center;
+      }
 
       // Get the last added polygon
       const lastFeature = features[features.length - 1];
@@ -144,7 +177,16 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       const pixel = mapInstanceRef.current.getPixelFromCoordinate([centerX, centerY]);
       if (!pixel) return null;
 
-      return [pixel[0], pixel[1]] as [number, number];
+      const result: [number, number] = [pixel[0], pixel[1]];
+      
+      // Обновляем кэш
+      polygonCenterCacheRef.current = {
+        featuresCount: features.length,
+        center: result,
+        viewState: viewState
+      };
+
+      return result;
     }, []);
 
     // Function to convert world file data to extent
@@ -204,57 +246,75 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           layer.setVisible(visible);
         }
       });
-    };
-
-    // Создание базовых слоев карты
+    };    // Создание базовых слоев карты
     const createBaseLayer = (layerType: string): TileLayer => {
+      // Базовые настройки производительности для всех слоев
+      const baseOptions = {
+        preload: 1, // Предзагрузка одного уровня
+        maxZoom: 19, // Ограничиваем максимальный зум
+        transition: 250, // Плавные переходы между тайлами
+      };
+
       switch (layerType) {
         case 'BingAerial':
           return new TileLayer({
             source: new BingMaps({
               key: 'AuhiCJHlGzhg93IqUH_oCpl_-ZUrIE6SPftlyGYUvr9Amx5nzA-WqGcPquyFZl4L',
               imagerySet: 'Aerial',
+              ...baseOptions,
             }),
           });
         case 'YandexSatellite':
           return new TileLayer({
             source: new XYZ({
               url: 'https://sat01.maps.yandex.net/tiles?l=sat&v=3.1025.0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+              ...baseOptions,
             }),
           });
         case 'GoogleSatellite':
           return new TileLayer({
             source: new XYZ({
               url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+              ...baseOptions,
             }),
           });
         case 'ESRISatellite':
           return new TileLayer({
             source: new XYZ({
               url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              ...baseOptions,
             }),
           });
         case 'ESRIStreet':
           return new TileLayer({
             source: new XYZ({
               url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+              ...baseOptions,
             }),
           });
         case 'OSM':
         default:
           return new TileLayer({
-            source: new OSM(),
+            source: new OSM({
+              ...baseOptions,
+            }),
           });
       }
-    };
-
-    // Создание overlay слоев
+    };    // Создание overlay слоев
     const createOverlayLayers = (layerType: string) => {
       const layers: { [key: string]: TileLayer } = {};
+
+      // Настройки производительности для overlay слоев
+      const overlayOptions = {
+        preload: 0, // Не предзагружаем overlay слои
+        maxZoom: 18,
+        transition: 150, // Быстрее переходы для overlay
+      };
 
       layers.borders = new TileLayer({
         source: new XYZ({
           url: 'https://tiles.wmflabs.org/osm-intl/{z}/{x}/{y}.png',
+          ...overlayOptions,
         }),
         opacity: 0.7,
         visible: false
@@ -263,6 +323,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       layers.contour = new TileLayer({
         source: new XYZ({
           url: 'https://maps.refuges.info/hiking/{z}/{x}/{y}.png',
+          ...overlayOptions,
         }),
         opacity: 0.6,
         visible: false
@@ -271,17 +332,17 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       layers.labels = new TileLayer({
         source: new XYZ({
           url: 'https://stamen-tiles-{a-d}.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png',
+          ...overlayOptions,
         }),
         opacity: 1.0,
         visible: true
-      });
-
-      const createRoadLayer = () => {
+      });      const createRoadLayer = () => {
         switch (layerType) {
           case 'BingAerial':
             return new TileLayer({
               source: new XYZ({
                 url: 'https://ecn.t0.tiles.virtualearth.net/tiles/h{quadkey}.jpeg?g=1',
+                ...overlayOptions,
               }),
               opacity: 0.8,
               visible: false
@@ -290,6 +351,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://vec01.maps.yandex.net/tiles?l=skl&v=20.06.03-0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+                ...overlayOptions,
               }),
               opacity: 0.8,
               visible: false
@@ -298,6 +360,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
+                ...overlayOptions,
               }),
               opacity: 0.8,
               visible: false
@@ -306,16 +369,18 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-            }),
-            opacity: 0.8,
-            visible: false
-          });
+                ...overlayOptions,
+              }),
+              opacity: 0.8,
+              visible: false
+            });
         case 'ESRIStreet':
         case 'OSM':
         default:
           return new TileLayer({
             source: new XYZ({
               url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+              ...overlayOptions,
             }),
             opacity: 0,
             visible: false
@@ -404,13 +469,42 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     };
   };
 
+  // Стиль для выделения полигона при наведении
+  const createHoverStyle = () => {
+    return (feature: any) => {
+      const styles: Style[] = [];
+      const geometry = feature.getGeometry();
+      if (geometry instanceof Polygon) {
+        // Основной стиль для выделения (жирная/яркая обводка)
+        styles.push(
+          new Style({
+            stroke: new Stroke({
+              color: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+              width: 4,
+            }),
+            fill: new Fill({
+              color: 'rgba(0,229,197,0.08)', // легкая подсветка
+            }),
+          })
+        );
+      }
+      return styles;
+    };
+  };
+
   // Инициализация карты
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;    const vectorSource = new VectorSource();
+    if (!mapRef.current || mapInstanceRef.current) return;    const vectorSource = new VectorSource({
+      // Настройки производительности для векторного источника
+      wrapX: false, // Отключаем обертку по X для лучшей производительности
+    });
     const vectorLayer = new VectorLayer({
       source: vectorSource,
       style: createVectorStyle(),
-      zIndex: 100 // Высокий zIndex для векторного слоя, чтобы он был поверх всех остальных
+      zIndex: 100, // Высокий zIndex для векторного слоя, чтобы он был поверх всех остальных
+      // Настройки производительности
+      updateWhileAnimating: false, // Не обновляем во время анимации
+      updateWhileInteracting: false, // Не обновляем во время взаимодействия
     });
 
     vectorSourceRef.current = vectorSource;
@@ -424,9 +518,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
     const attribution = new Attribution({
       collapsible: false,
-    });
-
-    const map = new Map({
+    });    const map = new Map({
       target: mapRef.current,
       layers: [
         baseLayer,
@@ -436,18 +528,20 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       view: new View({
         center: fromLonLat(initialCenter),
         zoom: initialZoom,
+        // Добавляем настройки для улучшения производительности
+        constrainResolution: true, // Ограничиваем разрешение для более плавного зуммирования
+        enableRotation: false, // Отключаем поворот для лучшей производительности
       }),
       controls: defaultControls({ attribution: false }).extend([attribution]),
-    });    vectorSource.on('addfeature', () => {
+      // Настройки производительности
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 2), // Ограничиваем pixel ratio для лучшей производительности
+    });vectorSource.on('addfeature', () => {
       if (onFeatureCountChange) {
         onFeatureCountChange(vectorSource.getFeatures().length);
       }
       
-      // Update polygon center for progress overlay positioning
-      if (onPolygonCenterChange) {
-        const polygonCenter = calculatePolygonCenterInPixels();
-        onPolygonCenterChange(polygonCenter);
-      }
+      // Дебаунсированное обновление центра полигона
+      schedulePolygonCenterUpdate();
     });
 
     vectorSource.on('removefeature', () => {
@@ -455,11 +549,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         onFeatureCountChange(vectorSource.getFeatures().length);
       }
       
-      // Update polygon center for progress overlay positioning
-      if (onPolygonCenterChange) {
-        const polygonCenter = calculatePolygonCenterInPixels();
-        onPolygonCenterChange(polygonCenter);
-      }
+      // Дебаунсированное обновление центра полигона
+      schedulePolygonCenterUpdate();
       
       // Удаляем изображение при удалении полигона
       clearImageLayer();
@@ -468,22 +559,21 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     mapInstanceRef.current = map;    map.getView().on('change:center', () => {
       currentCenterRef.current = toLonLat(map.getView().getCenter() as [number, number]) as [number, number];
       
-      // Update polygon center when map view changes
-      if (onPolygonCenterChange) {
-        const polygonCenter = calculatePolygonCenterInPixels();
-        onPolygonCenterChange(polygonCenter);
-      }
+      // Дебаунсированное обновление центра полигона
+      schedulePolygonCenterUpdate();
     });
 
     map.getView().on('change:resolution', () => {
       currentZoomRef.current = map.getView().getZoom() || initialZoom;
       
-      // Update polygon center when map view changes
-      if (onPolygonCenterChange) {
-        const polygonCenter = calculatePolygonCenterInPixels();
-        onPolygonCenterChange(polygonCenter);
+      // Дебаунсированное обновление центра полигона
+      schedulePolygonCenterUpdate();
+    });    return () => {
+      // Очищаем таймер дебаунсинга
+      if (debouncedUpdateRef.current) {
+        clearTimeout(debouncedUpdateRef.current);
       }
-    });return () => {
+      
       if (mapInstanceRef.current) {
         mapInstanceRef.current.setTarget(undefined);
         mapInstanceRef.current = null;
@@ -1391,18 +1481,18 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           console.error('=== Ошибка при замене изображения полигона ===');
           console.error('Error details:', error);
         }
-      },
-      navigateToPolygon: (index: number) => {
-        if (!mapInstanceRef.current || !loadedPolygonsRef.current) return;
+      },      navigateToPolygon: (index: number) => {
+        if (!mapInstanceRef.current || !vectorSourceRef.current) return;
 
-        const polygons = loadedPolygonsRef.current;
-        if (index < 0 || index >= polygons.length) {
+        // Используем полигоны из vectorSource для навигации
+        const features = vectorSourceRef.current.getFeatures();
+        if (index < 0 || index >= features.length) {
           console.error('Invalid polygon index:', index);
           return;
         }
 
-        const polygon = polygons[index];
-        const geometry = polygon.getGeometry();
+        const feature = features[index];
+        const geometry = feature.getGeometry();
         
         if (geometry instanceof Polygon) {
           const extent = geometry.getExtent();
@@ -1439,10 +1529,27 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         const features = vectorSourceRef.current.getFeatures();
         if (index < 0 || index >= features.length) return;
         const feature = features[index];
+        feature.set('visible', visible); // store visibility in feature property
         if (visible) {
           feature.setStyle(createVectorStyle()(feature));
         } else {
-          feature.setStyle(() => undefined); // скрыть
+          feature.setStyle(() => undefined); // hide
+        }
+      },
+      setPolygonHoverByIndex: (index: number, hovered: boolean) => {
+        if (!vectorSourceRef.current) return;
+        const features = vectorSourceRef.current.getFeatures();
+        if (index < 0 || index >= features.length) return;
+        const feature = features[index];
+        const visible = feature.get('visible');
+        if (hovered) {
+          feature.setStyle(createHoverStyle()(feature));
+        } else {
+          if (typeof visible === 'boolean' && visible === false) {
+            feature.setStyle(() => undefined);
+          } else {
+            feature.setStyle(createVectorStyle()(feature));
+          }
         }
       },
     }),

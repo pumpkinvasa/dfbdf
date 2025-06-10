@@ -273,6 +273,12 @@ const HomePage: React.FC = () => {
     }
   }, []);
 
+  const handlePolygonZoom = useCallback((polygonIndex: number) => {
+    if (mapRef.current && mapRef.current.navigateToPolygon) {
+      mapRef.current.navigateToPolygon(polygonIndex);
+    }
+  }, []);
+
   const handleClearAllFeatures = useCallback(() => {
     if (mapRef.current) {
       if (mapRef.current.clearAllFeatures) {
@@ -851,7 +857,21 @@ const HomePage: React.FC = () => {
 
   // Сброс видимости при изменении списка полигонов
   useEffect(() => {
-    setPolygonVisibility(aoiPolygons.map(() => true));
+    if (mapRef.current && mapRef.current.exportFeatures) {
+      const features = mapRef.current.exportFeatures();
+      setPolygonVisibility(features.map((_, i) => {
+        // Try to get visibility from feature property if possible
+        if (mapRef.current && mapRef.current.getLoadedPolygons) {
+          const loaded = mapRef.current.getLoadedPolygons();
+          if (loaded[i] && typeof loaded[i].properties?.visible === 'boolean') {
+            return loaded[i].properties.visible;
+          }
+        }
+        return true;
+      }));
+    } else {
+      setPolygonVisibility(aoiPolygons.map(() => true));
+    }
   }, [aoiPolygons.length]);
 
   const handlePolygonToggleVisibility = useCallback((polygonIndex: number) => {
@@ -871,6 +891,28 @@ const HomePage: React.FC = () => {
       setSnackbarOpen(true);
     }
   }, [mapRef]);
+
+  const [hoveredPolygonIndex, setHoveredPolygonIndex] = useState<number | null>(null);
+
+  const handlePolygonHover = useCallback((polygonIndex: number | null) => {
+    setHoveredPolygonIndex(polygonIndex);
+    if (mapRef.current) {
+      if (polygonIndex !== null && polygonIndex >= 0) {
+        mapRef.current.setPolygonHoverByIndex(polygonIndex, true);
+      }
+      // Remove highlight from all others
+      aoiPolygons.forEach((_, idx) => {
+        if (idx !== polygonIndex) {
+          mapRef.current!.setPolygonHoverByIndex(idx, false);
+        }
+      });
+      if (polygonIndex === null) {
+        aoiPolygons.forEach((_, idx) => {
+          mapRef.current!.setPolygonHoverByIndex(idx, false);
+        });
+      }
+    }
+  }, [mapRef, aoiPolygons]);
 
   return (
     <Box
@@ -970,6 +1012,9 @@ const HomePage: React.FC = () => {
           onPolygonToggleVisibility={handlePolygonToggleVisibility}
           onPolygonDelete={handlePolygonDelete}
           polygonVisibility={polygonVisibility}
+          onPolygonHover={handlePolygonHover}
+          hoveredPolygonIndex={hoveredPolygonIndex}
+          onPolygonZoom={handlePolygonZoom}
         /><AOIMenu
           open={compositesMenuOpen}
           onClose={handleCompositesMenuClose}

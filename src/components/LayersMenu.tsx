@@ -49,6 +49,9 @@ interface LayersMenuProps {
   onPolygonToggleVisibility?: (polygonIndex: number) => void;
   onPolygonDelete?: (polygonIndex: number) => void;
   polygonVisibility?: boolean[];
+  onPolygonHover?: (polygonIndex: number | null) => void;
+  hoveredPolygonIndex?: number | null;
+  onPolygonZoom?: (polygonIndex: number) => void; // Новый пропс для зума
 }
 
 const layerOptions: Layer[] = [
@@ -99,9 +102,51 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
   onPolygonSelect,
   onPolygonToggleVisibility,
   onPolygonDelete,
-  polygonVisibility = []
+  polygonVisibility = [],
+  onPolygonHover,
+  hoveredPolygonIndex,
+  onPolygonZoom
 }) => {
   const theme = useTheme();
+
+  // Состояние для управления задержкой одинарного клика
+  const [clickTimeout, setClickTimeout] = React.useState<NodeJS.Timeout | null>(null);
+  // Функция обработки клика с задержкой для различения одинарного и двойного клика
+  const handlePolygonClick = (index: number) => {
+    if (clickTimeout) {
+      // Это двойной клик - отменяем одинарный клик
+      clearTimeout(clickTimeout);
+      setClickTimeout(null);
+      return;
+    }
+
+    // Устанавливаем задержку для одинарного клика, но не делаем ничего
+    const timeout = setTimeout(() => {
+      // Одинарный клик - ничего не делаем
+      setClickTimeout(null);
+    }, 250); // 250ms задержка
+
+    setClickTimeout(timeout);
+  };
+
+  // Функция обработки двойного клика
+  const handlePolygonDoubleClick = (index: number) => {
+    if (clickTimeout) {
+      clearTimeout(clickTimeout);
+      setClickTimeout(null);
+    }
+    // Только при двойном клике приближаемся к полигону
+    onPolygonZoom?.(index);
+  };
+
+  // Очистка таймера при размонтировании компонента
+  React.useEffect(() => {
+    return () => {
+      if (clickTimeout) {
+        clearTimeout(clickTimeout);
+      }
+    };
+  }, [clickTimeout]);
 
   // Отладочное логирование
   console.log('LayersMenu: полигоны AOI:', aoiPolygons);
@@ -144,52 +189,55 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
         </IconButton>
       </Box>
       
-      <Divider sx={{ flexShrink: 0 }} />
-        {/* Прокручиваемое содержимое */}
+      <Divider sx={{ flexShrink: 0 }} />        {/* Прокручиваемое содержимое */}
       <Box sx={{ 
         flex: 1, 
-        overflow: 'auto',
+        overflow: 'hidden', // Убираем прокрутку с главного контейнера
         display: 'flex',
         flexDirection: 'column',
-        // Стилизация полосы прокрутки
-        '&::-webkit-scrollbar': {
-          width: '6px',
-        },
-        '&::-webkit-scrollbar-track': {
-          background: theme.palette.mode === 'dark' 
-            ? 'rgba(255, 255, 255, 0.05)' 
-            : 'rgba(0, 0, 0, 0.05)',
-          borderRadius: '3px',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: theme.palette.mode === 'dark' 
-            ? 'rgba(255, 255, 255, 0.2)' 
-            : 'rgba(0, 0, 0, 0.2)',
-          borderRadius: '3px',
-          '&:hover': {
-            background: theme.palette.mode === 'dark' 
-              ? 'rgba(255, 255, 255, 0.3)' 
-              : 'rgba(0, 0, 0, 0.3)',
-          },
-        },
-        // Для Firefox
-        scrollbarWidth: 'thin',
-        scrollbarColor: theme.palette.mode === 'dark' 
-          ? 'rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05)' 
-          : 'rgba(0, 0, 0, 0.2) rgba(0, 0, 0, 0.05)',
-      }}>        {/* Раздел Зона AOI */}
-        <Box sx={{ p: 1 }}>
-          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold' }}>
+      }}>
+        {/* Раздел Зона AOI - занимает половину */}
+        <Box sx={{ 
+          p: 1,
+          flex: 1, // Занимает половину доступного пространства
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold', flexShrink: 0 }}>
             Зона AOI
           </Typography>
-          <List dense>
-            {aoiPolygons.length === 0 ? (
-              <Box sx={{ px: 1, py: 2, textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Нет зон AOI. Нарисуйте полигоны на карте.
-                </Typography>
-              </Box>
-            ) : (              aoiPolygons.map((polygon, index) => {
+          <Box sx={{ 
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            '&::-webkit-scrollbar': {
+              width: '2px', // Очень тонкая полоса прокрутки
+            },
+            '&::-webkit-scrollbar-track': {
+              background: 'transparent',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.3)' 
+                : 'rgba(0, 0, 0, 0.3)',
+              borderRadius: '1px',
+            },
+            // Для Firefox
+            scrollbarWidth: 'thin',
+            scrollbarColor: theme.palette.mode === 'dark' 
+              ? 'rgba(255, 255, 255, 0.3) transparent' 
+              : 'rgba(0, 0, 0, 0.3) transparent',
+          }}>
+            <List dense>
+              {aoiPolygons.length === 0 ? (
+                <Box sx={{ px: 1, py: 2, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Нет зон AOI. Нарисуйте полигоны на карте.
+                  </Typography>
+                </Box>
+              ) : (
+                aoiPolygons.map((polygon, index) => {
                 // Рассчитываем площадь полигона правильно
                 let areaText = 'Область исследования';
                 
@@ -221,12 +269,13 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
                 const isVisible = polygonVisibility[index] !== false;
 
                 // Цвет иконок как в райт сайдбаре
-                const iconColor = theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main;
-
-                return (
+                const iconColor = theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main;                return (
                   <ListItemButton
                     key={index}
-                    onClick={() => onPolygonSelect?.(index)}
+                    onClick={() => handlePolygonClick(index)}
+                    onDoubleClick={() => handlePolygonDoubleClick(index)}
+                    onMouseEnter={() => onPolygonHover?.(index)}
+                    onMouseLeave={() => onPolygonHover?.(null)}
                     sx={{
                       mb: 0.5,
                       borderRadius: 1,
@@ -235,6 +284,9 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
                       },
                       display: 'flex',
                       alignItems: 'center',
+                      ...(hoveredPolygonIndex === index && {
+                        boxShadow: `0 0 0 2px ${theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main}`,
+                      }),
                     }}
                   >
                     <ListItemIcon>
@@ -264,94 +316,145 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
-                  </ListItemButton>
-                );
+                  </ListItemButton>                );
               })
             )}
-          </List>
+            </List>
+          </Box>
         </Box>
 
-        <Divider sx={{ mx: 2 }} />
-
-        {/* Раздел Подложка */}
-        <Box sx={{ p: 1 }}>
-          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold' }}>
+        <Divider sx={{ mx: 2 }} />        {/* Раздел Подложка */}
+        <Box sx={{ 
+          p: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold', flexShrink: 0 }}>
             Подложка
           </Typography>
-          <List dense>
-            {layerOptions.map((layer) => (
-              <ListItemButton
-                key={layer.id}
-                onClick={() => {
-                  onLayerSelect(layer.id);
-                }}
-                selected={currentLayer === layer.id}
-                sx={{
-                  mb: 0.5,
-                  borderRadius: 1,
-                }}
-              >
-                <ListItemIcon>
-                  {layer.icon}
-                </ListItemIcon>
-                <ListItemText 
-                  primary={layer.name} 
-                  secondary={layer.description}
-                  primaryTypographyProps={{ fontWeight: currentLayer === layer.id ? 'bold' : 'normal' }}
-                />
-              </ListItemButton>
-            ))}
-          </List>
+          <Box sx={{ 
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            maxHeight: '300px', // Ограничиваем высоту списка подложек
+            '&::-webkit-scrollbar': {
+              width: '4px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.05)' 
+                : 'rgba(0, 0, 0, 0.05)',
+              borderRadius: '2px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.2)' 
+                : 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '2px',
+            },
+          }}>
+            <List dense>
+              {layerOptions.map((layer) => (
+                <ListItemButton
+                  key={layer.id}
+                  onClick={() => {
+                    onLayerSelect(layer.id);
+                  }}
+                  selected={currentLayer === layer.id}
+                  sx={{
+                    mb: 0.5,
+                    borderRadius: 1,
+                  }}
+                >
+                  <ListItemIcon>
+                    {layer.icon}
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={layer.name} 
+                    secondary={layer.description}
+                    primaryTypographyProps={{ fontWeight: currentLayer === layer.id ? 'bold' : 'normal' }}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          </Box>
         </Box>
 
-        <Divider sx={{ mx: 2 }} />
-
-        {/* Дополнительные опции */}
-        <Box sx={{ px: 2, pb: 2 }}>
-          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold' }}>
+        <Divider sx={{ mx: 2 }} />        {/* Дополнительные опции */}
+        <Box sx={{ 
+          px: 2, 
+          pb: 2,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold', flexShrink: 0 }}>
             Дополнительные слои
           </Typography>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={false}
-                  size="small"
-                />
-              }
-              label="Границы"
-              sx={{ mb: 0.5 }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={false}
-                  size="small"
-                />
-              }
-              label="Контуры"
-              sx={{ mb: 0.5 }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={true}
-                  size="small"
-                />
-              }
-              label="Подписи"
-              sx={{ mb: 0.5 }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={false}
-                  size="small"
-                />
-              }
-              label="Дороги"
-            />
-          </FormGroup>
+          <Box sx={{ 
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            maxHeight: '150px', // Ограничиваем высоту дополнительных опций
+            '&::-webkit-scrollbar': {
+              width: '4px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.05)' 
+                : 'rgba(0, 0, 0, 0.05)',
+              borderRadius: '2px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.2)' 
+                : 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '2px',
+            },
+          }}>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={false}
+                    size="small"
+                  />
+                }
+                label="Границы"
+                sx={{ mb: 0.5 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={false}
+                    size="small"
+                  />
+                }
+                label="Контуры"
+                sx={{ mb: 0.5 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={true}
+                    size="small"
+                  />
+                }
+                label="Подписи"
+                sx={{ mb: 0.5 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={false}
+                    size="small"
+                  />
+                }
+                label="Дороги"
+              />
+            </FormGroup>
+          </Box>
         </Box>
       </Box>
     </Drawer>
