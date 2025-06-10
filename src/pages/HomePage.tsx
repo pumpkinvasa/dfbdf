@@ -41,8 +41,14 @@ const HomePage: React.FC = () => {
   const [mapZoom, setMapZoom] = useState<number | undefined>(undefined);
   const [activeDrawingTool, setActiveDrawingTool] = useState<'polygon' | 'rectangle' | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');  const [featureCount, setFeatureCount] = useState(0);
-  const [layersMenuOpen, setLayersMenuOpen] = useState(false);  const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');  const [featureCount, setFeatureCount] = useState(0);  const [aoiPolygons, setAoiPolygons] = useState<any[]>([]);
+  
+  // Отладочное логирование состояния полигонов
+  useEffect(() => {
+    console.log('Состояние aoiPolygons изменилось:', aoiPolygons);
+  }, [aoiPolygons]);
+
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
   const [currentComposite, setCurrentComposite] = useState<CompositeType | null>(null);
@@ -170,14 +176,19 @@ const HomePage: React.FC = () => {
                   if (progress >= 100) {
                     clearInterval(progressInterval);
                     progress = 100;
-                    
-                    // После завершения прогресс-бара загружаем данные на карту
+                      // После завершения прогресс-бара загружаем данные на карту
                     if (mapRef.current && mapRef.current.loadGeoJSON) {
                       // Очищаем предыдущие объекты перед загрузкой новых
                       mapRef.current.clearAllFeatures();
                       
                       // Загружаем GeoJSON на карту с раскраской по здоровью
                       mapRef.current.loadGeoJSON(geoJSON, undefined, true);
+                      
+                      // Обновляем список полигонов AOI после загрузки
+                      if (mapRef.current.exportFeatures) {
+                        const allFeatures = mapRef.current.exportFeatures();
+                        setAoiPolygons(allFeatures);
+                      }
                         // Формируем статистику по состоянию резервуаров
                       const healthSummary = `Зеленые: ${healthStatistics['2']}, Желтые: ${healthStatistics['3']}, Красные: ${healthStatistics['0'] + healthStatistics['1']}`;
                       
@@ -226,18 +237,43 @@ const HomePage: React.FC = () => {
         document.body.removeChild(fileInput);
         break;
     }
-  }, [activeDrawingTool]);
-
-  const handleFeatureAdded = useCallback((feature: any) => {
+  }, [activeDrawingTool]);  const handleFeatureAdded = useCallback((feature: any) => {
     console.log('Добавлен новый объект:', feature);
     setSnackbarMessage('Объект успешно создан');
     setSnackbarOpen(true);
+    
+    // Обновляем список полигонов AOI с задержкой, чтобы дать время карте обновиться
+    setTimeout(() => {
+      if (mapRef.current && mapRef.current.exportFeatures) {
+        const allFeatures = mapRef.current.exportFeatures();
+        console.log('Экспортированные объекты после добавления:', allFeatures);
+        setAoiPolygons(allFeatures);
+      } else {
+        console.warn('mapRef.current или exportFeatures недоступны');
+      }
+    }, 100);
     // Removed setActiveDrawingTool(null) to keep drawing tool active
+  }, []);  const handleFeatureCountChange = useCallback((count: number) => {
+    setFeatureCount(count);
+    
+    // Также обновляем список полигонов AOI при изменении количества объектов
+    if (mapRef.current && mapRef.current.exportFeatures) {
+      const allFeatures = mapRef.current.exportFeatures();
+      console.log('Обновление списка полигонов, количество:', count, 'объекты:', allFeatures);
+      setAoiPolygons(allFeatures);
+    }
+  }, []);
+  const handlePolygonsUpdate = useCallback((polygons: any[]) => {
+    setAoiPolygons(polygons);
   }, []);
 
-  const handleFeatureCountChange = useCallback((count: number) => {
-    setFeatureCount(count);
-  }, []);  const handleClearAllFeatures = useCallback(() => {
+  const handlePolygonSelect = useCallback((polygonIndex: number) => {
+    if (mapRef.current && mapRef.current.navigateToPolygon) {
+      mapRef.current.navigateToPolygon(polygonIndex);
+    }
+  }, []);
+
+  const handleClearAllFeatures = useCallback(() => {
     if (mapRef.current) {
       if (mapRef.current.clearAllFeatures) {
         mapRef.current.clearAllFeatures();
@@ -247,6 +283,7 @@ const HomePage: React.FC = () => {
         mapRef.current.clearTemporaryRectangle();
       }
       setHasTemporaryRectangle(false);
+      setAoiPolygons([]); // Очищаем список полигонов AOI
       setSnackbarMessage('Все объекты удалены');
       setSnackbarOpen(true);
     }
@@ -898,13 +935,14 @@ const HomePage: React.FC = () => {
           hasFeatures={featureCount > 0}
           onToggleVisibility={handleToggleVisibility}
           polygonsVisible={polygonsVisible}
-        />
-        <LayersMenu
+        />        <LayersMenu
           open={layersMenuOpen}
           onClose={handleLayersMenuClose}
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
-        />        <AOIMenu
+          aoiPolygons={aoiPolygons}
+          onPolygonSelect={handlePolygonSelect}
+        /><AOIMenu
           open={compositesMenuOpen}
           onClose={handleCompositesMenuClose}
           onCompositeSelect={handleCompositeSelect}

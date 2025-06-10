@@ -218,28 +218,24 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           return new TileLayer({
             source: new XYZ({
               url: 'https://sat01.maps.yandex.net/tiles?l=sat&v=3.1025.0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
-              attributions: '© Яндекс.Карты'
             }),
           });
         case 'GoogleSatellite':
           return new TileLayer({
             source: new XYZ({
               url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-              attributions: '© Google'
             }),
           });
         case 'ESRISatellite':
           return new TileLayer({
             source: new XYZ({
               url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              attributions: '© Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community'
             }),
           });
         case 'ESRIStreet':
           return new TileLayer({
             source: new XYZ({
               url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-              attributions: '© Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community'
             }),
           });
         case 'OSM':
@@ -257,7 +253,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       layers.borders = new TileLayer({
         source: new XYZ({
           url: 'https://tiles.wmflabs.org/osm-intl/{z}/{x}/{y}.png',
-          attributions: '© OpenStreetMap contributors'
         }),
         opacity: 0.7,
         visible: false
@@ -266,7 +261,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       layers.contour = new TileLayer({
         source: new XYZ({
           url: 'https://maps.refuges.info/hiking/{z}/{x}/{y}.png',
-          attributions: '© refuges.info'
         }),
         opacity: 0.6,
         visible: false
@@ -275,7 +269,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       layers.labels = new TileLayer({
         source: new XYZ({
           url: 'https://stamen-tiles-{a-d}.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png',
-          attributions: '© Stamen Design'
         }),
         opacity: 1.0,
         visible: true
@@ -287,7 +280,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://ecn.t0.tiles.virtualearth.net/tiles/h{quadkey}.jpeg?g=1',
-                attributions: '© Microsoft Bing Maps'
               }),
               opacity: 0.8,
               visible: false
@@ -296,7 +288,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://vec01.maps.yandex.net/tiles?l=skl&v=20.06.03-0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
-                attributions: '© Яндекс.Карты'
               }),
               opacity: 0.8,
               visible: false
@@ -305,7 +296,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
-                attributions: '© Google'
               }),
               opacity: 0.8,
               visible: false
@@ -314,7 +304,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             return new TileLayer({
               source: new XYZ({
                 url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-              attributions: '© Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, and the GIS User Community'
             }),
             opacity: 0.8,
             visible: false
@@ -325,7 +314,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           return new TileLayer({
             source: new XYZ({
               url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-              attributions: ''
             }),
             opacity: 0,
             visible: false

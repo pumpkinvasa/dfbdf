@@ -40,7 +40,6 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
   const theme = useTheme();
-  // Сбрасываем выделение кнопки при закрытии соответствующего меню
   useEffect(() => {
     if (!layersMenuOpen && selectedTab === 1) {
       setSelectedTab(0);
@@ -63,17 +62,16 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <p>Здесь вы можете управлять основными функциями и просматривать статистику.</p>
         </Box>
       ),
-    },
-    {
-      title: 'Слои карты',
+    },    {
+      title: 'Слои',
       icon: <LayersIcon />,
       content: (
         <Box p={3}>
-          <h5>Слои карты</h5>
-          <p>Здесь вы можете выбрать различные слои для отображения на карте.</p>
+          <h5>Слои</h5>
+          <p>Здесь вы можете управлять зонами AOI и подложкой карты.</p>
         </Box>
       ),
-    },    {
+    },{
       title: 'Композитные слои',
       icon: <FormatColorFillIcon />,
       content: (
