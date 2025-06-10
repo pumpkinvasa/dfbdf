@@ -35,6 +35,7 @@ interface SearchMenuProps {
   onSearchSelect: (searchId: SearchType) => void;
   selectedSearches: SearchType[];
   onStartAnalysis?: () => void;
+  reservoirFile?: File | null;
 }
 
 const searchOptions: SearchOption[] = [
@@ -75,16 +76,19 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
   onClose, 
   onSearchSelect, 
   selectedSearches,
-  onStartAnalysis
+  onStartAnalysis,
+  reservoirFile
 }) => {
   const theme = useTheme();
   
-  return (
-    <Drawer
+  return (    <Drawer
       anchor="left"
       open={open}
       onClose={onClose}
       variant="temporary"
+      disableAutoFocus
+      disableEnforceFocus
+      disableRestoreFocus
       sx={{
         width: 300,
         flexShrink: 0,
@@ -197,9 +201,42 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
                     ? theme.palette.primary.main 
                     : theme.palette.text.primary,
                 }}
-              />
-            </ListItemButton>          ))}
+              />            </ListItemButton>          ))}
         </List>
+        
+        {/* Информация о загруженном файле резервуаров */}
+        {selectedSearches.includes('reservoirs') && (
+          <Box sx={{ 
+            p: 2, 
+            mx: 1, 
+            mb: 1,
+            borderRadius: 1,
+            bgcolor: reservoirFile 
+              ? theme.palette.success.main + '20' 
+              : theme.palette.warning.main + '20',
+            border: `1px solid ${reservoirFile 
+              ? theme.palette.success.main 
+              : theme.palette.warning.main}`
+          }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>
+              Файл резервуаров:
+            </Typography>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: reservoirFile 
+                  ? theme.palette.success.main 
+                  : theme.palette.warning.main,
+                fontWeight: 'medium'
+              }}
+            >
+              {reservoirFile 
+                ? `✓ ${reservoirFile.name} (${(reservoirFile.size / 1024).toFixed(1)} KB)`
+                : '⚠ Файл не загружен'
+              }
+            </Typography>
+          </Box>
+        )}
       </Box>
       
       {/* Кнопка запуска анализа - фиксированная внизу */}
@@ -207,12 +244,14 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
         flexShrink: 0,
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`
-      }}>
-        <Button
+      }}>        <Button
           variant="contained"
           fullWidth
           size="large"
-          disabled={selectedSearches.length === 0}
+          disabled={
+            selectedSearches.length === 0 ||
+            (selectedSearches.includes('reservoirs') && !reservoirFile)
+          }
           onClick={onStartAnalysis}
           startIcon={<PlayArrowIcon />}
           sx={{
@@ -226,8 +265,7 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
           }}
         >
           Запустить анализ
-        </Button>
-        {selectedSearches.length === 0 && (
+        </Button>        {selectedSearches.length === 0 && (
           <Typography 
             variant="caption" 
             color="text.secondary" 
@@ -240,7 +278,20 @@ const SearchMenu: React.FC<SearchMenuProps> = ({
             Выберите тип поиска для анализа
           </Typography>
         )}
-        {selectedSearches.length > 0 && (
+        {selectedSearches.includes('reservoirs') && !reservoirFile && (
+          <Typography 
+            variant="caption" 
+            color="warning.main" 
+            sx={{ 
+              display: 'block', 
+              textAlign: 'center', 
+              mt: 1,
+              fontWeight: 'medium'
+            }}
+          >
+            Загрузите файл резервуаров для продолжения
+          </Typography>        )}
+        {selectedSearches.length > 0 && !(selectedSearches.includes('reservoirs') && !reservoirFile) && (
           <Typography 
             variant="caption" 
             color="primary" 

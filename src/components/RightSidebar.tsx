@@ -197,11 +197,11 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
           </IconButton>
         </Tooltip>
       ))}
-      
-      <Popper 
+        <Popper 
         open={drawingMenuOpen && drawingButtonRef.current !== null} 
         anchorEl={drawingButtonRef.current}
         placement="left"
+        disablePortal={false}
         style={{ zIndex: 1300 }}
         modifiers={[
           {

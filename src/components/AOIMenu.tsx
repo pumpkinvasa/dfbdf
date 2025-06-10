@@ -112,12 +112,14 @@ const AOIMenu: React.FC<AOIMenuProps> = ({
     }
   };
   
-  return (
-    <Drawer
+  return (    <Drawer
       anchor="left"
       open={open}
       onClose={onClose}
       variant="temporary"
+      disableAutoFocus
+      disableEnforceFocus
+      disableRestoreFocus
       sx={{
         width: 300,
         flexShrink: 0,

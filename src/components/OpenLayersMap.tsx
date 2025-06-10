@@ -25,7 +25,7 @@ import { Coordinate } from 'ol/coordinate';
 
 // Тип для ref
 export interface OpenLayersMapHandle {
-  loadGeoJSON: (geoJSON: any) => void;
+  loadGeoJSON: (geoJSON: any, onPolygonsLoaded?: (polygons: any[]) => void, colorByHealth?: boolean) => void;
   clearAllFeatures: () => void;
   disableDrawingMode: () => void;
   showTemporaryRectangle: () => void;
@@ -35,6 +35,8 @@ export interface OpenLayersMapHandle {
   togglePolygonsVisibility: () => void;
   getPolygonImageBase64: () => Promise<string>;
   replacePolygonImage: (base64Image: string) => void;
+  navigateToPolygon: (index: number) => void;
+  getLoadedPolygons: () => any[];
 }
 
 interface OpenLayersMapProps {
@@ -96,10 +98,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     const currentZoomRef = useRef<number>(initialZoom);
     const currentCenterRef = useRef<[number, number]>(initialCenter);
     const theme = useTheme();
-    const temporaryFeatureRef = useRef<Feature | null>(null);
-    const overlayRef = useRef<Overlay | null>(null);
+    const temporaryFeatureRef = useRef<Feature | null>(null);    const overlayRef = useRef<Overlay | null>(null);
     const temporaryDivRef = useRef<HTMLDivElement | null>(null);
-    const imageLayerRef = useRef<ImageLayer<Static> | null>(null);    // Function to clear existing image layer
+    const imageLayerRef = useRef<ImageLayer<Static> | null>(null);
+    const loadedPolygonsRef = useRef<Feature[]>([]);// Function to clear existing image layer
     const clearImageLayer = useCallback(() => {
       if (imageLayerRef.current && mapInstanceRef.current) {
         console.log('Clearing existing image layer');
@@ -800,31 +802,178 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
   }, []);
   // Экспонируем функции через ref
   useImperativeHandle(
-    ref,
-    () => ({
-      loadGeoJSON: (geoJSON: any) => {
-        if (!vectorSourceRef.current || !mapInstanceRef.current) return;
+    ref,    () => ({      loadGeoJSON: (geoJSON: any, onPolygonsLoaded?: (polygons: any[]) => void, colorByHealth: boolean = false) => {
+        console.log('=== Loading GeoJSON ===');
+        console.log('GeoJSON data:', geoJSON);
+        
+        if (!vectorSourceRef.current || !mapInstanceRef.current) {
+          console.error('Vector source or map instance not available');
+          return;
+        }
 
         const format = new GeoJSON();
+        
+        // Проверяем CRS в GeoJSON файле
+        const crs = geoJSON.crs?.properties?.name;
+        console.log('GeoJSON CRS:', crs);
+        
+        // Определяем проекцию данных на основе CRS
+        let dataProjection = 'EPSG:4326'; // по умолчанию
+        if (crs && crs.includes('3857')) {
+          dataProjection = 'EPSG:3857';
+        }
+        
+        console.log('Using data projection:', dataProjection);
+        
         const features = format.readFeatures(geoJSON, {
-          dataProjection: 'EPSG:4326',
+          dataProjection: dataProjection,
           featureProjection: 'EPSG:3857',
         });
+        console.log('Features loaded:', features.length);
+          // Функция для определения цвета на основе значения "Здоровье"
+        const getHealthColor = (healthValue: number) => {
+          switch (healthValue) {
+            case 2:
+              return 'rgba(0, 200, 0, 0.6)'; // Зеленый
+            case 0:
+            case 1:
+              return 'rgba(255, 0, 0, 0.6)'; // Красный
+            case 3:
+              return 'rgba(255, 215, 0, 0.6)'; // Желтый
+            default:
+              return 'rgba(0, 179, 179, 0.4)'; // Стандартный цвет
+          }
+        };
 
-        features.forEach((feature) => {
-          feature.setStyle(createVectorStyle());
+        // Функция для определения цвета обводки на основе значения "Здоровье"
+        const getHealthStrokeColor = (healthValue: number) => {
+          switch (healthValue) {
+            case 2:
+              return '#008800'; // Темно-зеленый
+            case 0:
+            case 1:
+              return '#880000'; // Темно-красный
+            case 3:
+              return '#A08800'; // Темно-желтый
+            default:
+              return '#005555'; // Темно-голубой
+          }
+        };
+
+        // Создаем стандартный стиль для полигонов резервуаров
+        const defaultReservoirStyle = new Style({
+          stroke: new Stroke({
+            color: '#00b3b3',
+            width: 3
+          }),
+          fill: new Fill({
+            color: 'rgba(0, 179, 179, 0.4)'
+          })
         });
 
-        vectorSourceRef.current.addFeatures(features);
+        features.forEach((feature, index) => {
+          if (colorByHealth) {
+            // Получаем значение "Здоровье" из свойств объекта
+            const properties = feature.getProperties();
+            const healthValue = properties?.Здоровье !== undefined ? Number(properties.Здоровье) : undefined;
+            console.log(`Feature ${index} health:`, healthValue);
+            
+            if (healthValue !== undefined) {
+              // Создаем индивидуальный стиль на основе значения "Здоровье"
+              const healthStyle = new Style({
+                stroke: new Stroke({
+                  color: getHealthStrokeColor(healthValue),
+                  width: 3
+                }),
+                fill: new Fill({
+                  color: getHealthColor(healthValue)
+                }),
+                // Добавляем текстовую метку с значением id объекта
+                text: properties?.fid ? new Text({
+                  text: `${properties.fid}`,
+                  font: 'bold 14px Arial',
+                  fill: new Fill({
+                    color: '#FFFFFF'
+                  }),
+                  stroke: new Stroke({
+                    color: '#000000',
+                    width: 2
+                  }),
+                  offsetY: -15
+                }) : undefined
+              });
+              feature.setStyle(healthStyle);
+            } else {
+              feature.setStyle(defaultReservoirStyle);
+            }
+          } else {
+            // Применяем стандартный стиль
+            feature.setStyle(defaultReservoirStyle);
+          }
+          console.log(`Feature ${index} geometry:`, feature.getGeometry()?.getType());
+        });
 
-        if (features.length > 0) {
+        // Store loaded polygons in ref for navigation
+        loadedPolygonsRef.current = [...features];
+
+        // Очищаем существующие объекты перед добавлением новых
+        vectorSourceRef.current.clear();
+        vectorSourceRef.current.addFeatures(features);
+        
+        console.log('Features added to vector source. Total features:', vectorSourceRef.current.getFeatures().length);        if (features.length > 0) {
           const extent = vectorSourceRef.current.getExtent();
+          console.log('Calculated extent:', extent);
+          
           const view = mapInstanceRef.current.getView();
 
           view.fit(extent, {
             padding: [20, 20, 20, 20],
             maxZoom: 16,
           });
+          
+          console.log('Map view fitted to extent');
+
+          // Call the callback with the loaded polygons if provided
+          if (onPolygonsLoaded) {
+            const polygonData = features.map(feature => 
+              format.writeFeatureObject(feature, {
+                dataProjection: 'EPSG:4326',
+                featureProjection: 'EPSG:3857',
+              })
+            );
+            onPolygonsLoaded(polygonData);
+          }
+          
+          // Уведомляем о изменении количества объектов
+          if (onFeatureCountChange) {
+            onFeatureCountChange(vectorSourceRef.current.getFeatures().length);
+          }
+        }
+        
+        console.log('=== GeoJSON loading completed ===');
+          // Дополнительная проверка видимости векторного слоя
+        if (vectorLayerRef.current) {
+          console.log('Vector layer visibility:', vectorLayerRef.current.getVisible());
+          console.log('Vector layer z-index:', vectorLayerRef.current.getZIndex());
+          
+          // Убеждаемся, что векторный слой видим и имеет правильный z-index
+          vectorLayerRef.current.setVisible(true);
+          vectorLayerRef.current.setZIndex(1000); // Убедимся, что векторный слой поверх остальных слоев
+          
+          // Убедимся, что текущая карта точно содержит векторный слой
+          const layers = mapInstanceRef.current.getLayers();
+          const hasVectorLayer = layers.getArray().includes(vectorLayerRef.current);
+          
+          if (!hasVectorLayer) {
+            console.log('Vector layer not in map layers, adding it...');
+            mapInstanceRef.current.addLayer(vectorLayerRef.current);
+          }
+          
+          // Принудительно обновляем карту
+          mapInstanceRef.current.render();
+          
+          // Дополнительное сообщение для отладки
+          console.log('After rendering - Vector layer visibility:', vectorLayerRef.current.getVisible());
         }
       },
       exportFeatures: () => {
@@ -839,11 +988,12 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             featureProjection: 'EPSG:3857',
           })
         );
-      },
-      clearAllFeatures: () => {
+      },      clearAllFeatures: () => {
         if (vectorSourceRef.current) {
           vectorSourceRef.current.clear();
         }
+        // Also clear loaded polygons when clearing all features
+        loadedPolygonsRef.current = [];
       },
       disableDrawingMode: () => {
         if (!mapInstanceRef.current || !mapRef.current) return;
@@ -1245,11 +1395,46 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             
             console.log('=== Замена изображения завершена с fallback методом ===');
           };
-            img.src = imageUrl;
-        } catch (error) {
+            img.src = imageUrl;        } catch (error) {
           console.error('=== Ошибка при замене изображения полигона ===');
           console.error('Error details:', error);
         }
+      },
+      navigateToPolygon: (index: number) => {
+        if (!mapInstanceRef.current || !loadedPolygonsRef.current) return;
+
+        const polygons = loadedPolygonsRef.current;
+        if (index < 0 || index >= polygons.length) {
+          console.error('Invalid polygon index:', index);
+          return;
+        }
+
+        const polygon = polygons[index];
+        const geometry = polygon.getGeometry();
+        
+        if (geometry instanceof Polygon) {
+          const extent = geometry.getExtent();
+          const view = mapInstanceRef.current.getView();
+
+          view.fit(extent, {
+            padding: [50, 50, 50, 50],
+            maxZoom: 16,
+            duration: 1000
+          });
+          
+          console.log(`Navigated to polygon ${index}`);
+        }
+      },
+      getLoadedPolygons: () => {
+        if (!loadedPolygonsRef.current) return [];
+
+        const format = new GeoJSON();
+        return loadedPolygonsRef.current.map(feature => 
+          format.writeFeatureObject(feature, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857',
+          })
+        );
       }
     }),
     [showTemporaryRectangle, clearTemporaryRectangle, clearImageLayer, worldFileToExtent],

@@ -56,12 +56,14 @@ const CompositesMenu: React.FC<CompositesMenuProps> = ({
 }) => {
   const theme = useTheme();
   
-  return (
-    <Drawer
+  return (    <Drawer
       anchor="left"
       open={open}
       onClose={onClose}
       variant="temporary"
+      disableAutoFocus
+      disableEnforceFocus
+      disableRestoreFocus
       sx={{
         width: 300,
         flexShrink: 0,
