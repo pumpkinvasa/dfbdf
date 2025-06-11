@@ -38,8 +38,8 @@ export interface OpenLayersMapHandle {
   navigateToPolygon: (index: number) => void;
   getLoadedPolygons: () => any[];
   removePolygonByIndex: (index: number) => void;
-  setPolygonVisibilityByIndex: (index: number, visible: boolean) => void;
-  setPolygonHoverByIndex: (index: number, hovered: boolean) => void; // Новая функция для установки наведения
+  setPolygonVisibilityByIndex: (index: number, visible: boolean) => void;  setPolygonHoverByIndex: (index: number, hovered: boolean) => void; // Новая функция для установки наведения
+  addGeoJSONFeature: (geoJSON: any) => void; // Добавить GeoJSON фичу на карту
 }
 
 interface OpenLayersMapProps {
@@ -1534,8 +1534,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         } else {
           feature.setStyle(() => undefined); // hide
         }
-      },
-      setPolygonHoverByIndex: (index: number, hovered: boolean) => {
+      },      setPolygonHoverByIndex: (index: number, hovered: boolean) => {
         if (!vectorSourceRef.current) return;
         const features = vectorSourceRef.current.getFeatures();
         if (index < 0 || index >= features.length) return;
@@ -1549,6 +1548,46 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           } else {
             feature.setStyle(createVectorStyle()(feature));
           }
+        }
+      },      addGeoJSONFeature: (geoJSON: any) => {
+        console.log('Adding GeoJSON feature to map:', geoJSON);
+        
+        if (!vectorSourceRef.current || !mapInstanceRef.current) {
+          console.error('Vector source or map instance not available');
+          return;
+        }
+
+        try {
+          const format = new GeoJSON();
+          const feature = format.readFeature(geoJSON, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857',
+          });
+
+          // Проверяем, что feature это одиночная фича, а не массив
+          if (Array.isArray(feature)) {
+            console.error('Expected single feature, got array');
+            return;
+          }
+
+          // Устанавливаем стиль для фичи
+          feature.setStyle(createVectorStyle());
+          
+          // Добавляем фичу в векторный источник
+          vectorSourceRef.current.addFeature(feature);
+          
+          console.log('GeoJSON feature successfully added to map');
+          
+          // Обновляем количество фич
+          if (onFeatureCountChange) {
+            onFeatureCountChange(vectorSourceRef.current.getFeatures().length);
+          }
+          
+          // Обновляем центр полигона
+          schedulePolygonCenterUpdate();
+          
+        } catch (error) {
+          console.error('Error adding GeoJSON feature:', error);
         }
       },
     }),

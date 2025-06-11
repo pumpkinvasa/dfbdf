@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Drawer,
@@ -9,16 +9,20 @@ import {
   List,
   ListItemButton,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  Button
 } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SatelliteIcon from '@mui/icons-material/Satellite';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DownloadIcon from '@mui/icons-material/Download';
+import PublicIcon from '@mui/icons-material/Public';
 import { GeoJSON } from 'ol/format';
 import { getArea } from 'ol/sphere';
 import Polygon from 'ol/geom/Polygon';
+import QuickPolygonSelector from './QuickPolygonSelector';
 
 interface DashboardMenuProps {
   open: boolean;
@@ -31,6 +35,7 @@ interface DashboardMenuProps {
   onPolygonHover?: (polygonIndex: number | null) => void;
   hoveredPolygonIndex?: number | null;
   onPolygonZoom?: (polygonIndex: number) => void;
+  onTerritoryPolygonAdd?: (geoJSON: any) => void;
 }
 
 const DashboardMenu: React.FC<DashboardMenuProps> = ({ 
@@ -43,15 +48,76 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
   polygonVisibility = [],
   onPolygonHover,
   hoveredPolygonIndex,
-  onPolygonZoom
-}) => {  const theme = useTheme();
-
+  onPolygonZoom,
+  onTerritoryPolygonAdd
+}) => {
+  const theme = useTheme();
+  const [quickPolygonSelectorOpen, setQuickPolygonSelectorOpen] = useState(false);
   const handlePolygonDoubleClick = (index: number) => {
     // Только при двойном клике приближаемся к полигону
     onPolygonZoom?.(index);
   };
+  const handleDownloadPolygon = (polygon: any, index: number) => {
+    try {
+      // Создаем GeoJSON объект с одним полигоном
+      const geoJsonData = {
+        type: 'FeatureCollection',
+        features: [polygon]
+      };
 
+      // Конвертируем в JSON строку
+      const dataStr = JSON.stringify(geoJsonData, null, 2);
+      
+      // Создаем Blob
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      
+      // Создаем ссылку для скачивания
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `polygon_aoi_${index + 1}.geojson`;
+      
+      // Запускаем скачивание
+      document.body.appendChild(link);
+      link.click();
+      
+      // Очищаем ресурсы
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log(`Полигон AOI ${index + 1} скачан как GeoJSON`);
+    } catch (error) {
+      console.error('Ошибка при скачивании полигона:', error);
+    }
+  };
+
+  const handleTerritorySelect = (territory: any) => {
+    if (!territory.coordinates || !onTerritoryPolygonAdd) return;
+
+    try {
+      // Создаем GeoJSON объект из координат территории
+      const geoJSON = {
+        type: 'Feature',
+        properties: {
+          name: territory.name,
+          type: territory.type,
+          parent: territory.parent,
+          source: 'quick_polygon'
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: territory.coordinates
+        }
+      };
+
+      console.log('Создан полигон территории:', territory.name, geoJSON);
+      onTerritoryPolygonAdd(geoJSON);
+    } catch (error) {
+      console.error('Ошибка при создании полигона территории:', error);
+    }
+  };
   return (
+    <>
     <Drawer
       anchor="left"
       open={open}
@@ -87,9 +153,31 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
         </Typography>
         <IconButton onClick={onClose}>
           <ChevronRightIcon />
-        </IconButton>
+        </IconButton>      </Box>
+      <Divider sx={{ flexShrink: 0 }} />
+
+      {/* Кнопка быстрого полигона */}
+      <Box sx={{ p: 1, flexShrink: 0 }}>
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<PublicIcon />}
+          onClick={() => setQuickPolygonSelectorOpen(true)}
+          sx={{
+            borderColor: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+            color: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+            '&:hover': {
+              borderColor: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+              backgroundColor: theme.palette.mode === 'dark' 
+                ? 'rgba(0, 229, 197, 0.08)' 
+                : 'rgba(25, 118, 210, 0.08)',
+            },
+          }}
+        >
+          Быстрый полигон
+        </Button>
       </Box>
-      <Divider sx={{ flexShrink: 0 }} />      {/* Прокручиваемый контент */}
+      <Divider sx={{ flexShrink: 0 }} />{/* Прокручиваемый контент */}
       <Box sx={{
         flex: 1,
         overflow: 'auto',
@@ -182,14 +270,25 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
                     <ListItemText 
                       primary={`Полигон AOI ${index + 1}`}
                       secondary={areaText}
-                    />
+                    />                    <IconButton
+                      size="small"
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleDownloadPolygon(polygon, index);
+                      }}
+                      sx={{ ml: 1, color: iconColor }}
+                      title="Скачать GeoJSON"
+                    >
+                      <DownloadIcon fontSize="small" />
+                    </IconButton>
                     <IconButton
                       size="small"
                       onClick={e => {
                         e.stopPropagation();
                         onPolygonToggleVisibility?.(index);
                       }}
-                      sx={{ ml: 1, color: iconColor }}
+                      sx={{ ml: 0.5, color: iconColor }}
+                      title="Переключить видимость"
                     >
                       {isVisible ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
                     </IconButton>
@@ -200,6 +299,7 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
                         onPolygonDelete?.(index);
                       }}
                       sx={{ ml: 0.5, color: iconColor }}
+                      title="Удалить полигон"
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -207,11 +307,17 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
                 );
               })
             )}
-          </List>
-        </Box>
+          </List>        </Box>
       </Box>
     </Drawer>
-  );
+
+    {/* Диалог быстрого выбора полигона */}
+    <QuickPolygonSelector
+      open={quickPolygonSelectorOpen}
+      onClose={() => setQuickPolygonSelectorOpen(false)}
+      onTerritorySelect={handleTerritorySelect}
+    />
+  </>);
 };
 
 export default DashboardMenu;

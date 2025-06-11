@@ -920,9 +920,23 @@ const HomePage: React.FC = () => {
         aoiPolygons.forEach((_, idx) => {
           mapRef.current!.setPolygonHoverByIndex(idx, false);
         });
-      }
-    }
+      }    }
   }, [mapRef, aoiPolygons]);
+  const handleTerritoryPolygonAdd = useCallback((geoJSON: any) => {
+    if (mapRef.current) {
+      console.log('Добавление территориального полигона:', geoJSON);
+      
+      // Добавляем полигон на карту через новый метод
+      if (mapRef.current.addGeoJSONFeature) {
+        mapRef.current.addGeoJSONFeature(geoJSON);
+      } else {
+        console.error('Метод addGeoJSONFeature недоступен');
+      }
+      
+      setSnackbarMessage(`Добавлен полигон: ${geoJSON.properties?.name || 'Территория'}`);
+      setSnackbarOpen(true);
+    }
+  }, [mapRef]);
 
   return (
     <Box
@@ -1026,8 +1040,7 @@ const HomePage: React.FC = () => {
           onFileUpload={handleFileUpload}
           currentComposite={currentComposite}
           currentSatellite={currentSatellite}
-        />
-          <DashboardMenu
+        />          <DashboardMenu
           open={dashboardMenuOpen}
           onClose={handleDashboardMenuClose}
           aoiPolygons={aoiPolygons}
@@ -1038,6 +1051,7 @@ const HomePage: React.FC = () => {
           onPolygonHover={handlePolygonHover}
           hoveredPolygonIndex={hoveredPolygonIndex}
           onPolygonZoom={handlePolygonZoom}
+          onTerritoryPolygonAdd={handleTerritoryPolygonAdd}
         />
         
         <SearchMenu
