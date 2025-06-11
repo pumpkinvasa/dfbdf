@@ -9,9 +9,6 @@ import {
   Typography,
   IconButton,
   Divider,
-  FormGroup,
-  FormControlLabel,
-  Checkbox,
   useTheme
 } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -155,139 +152,32 @@ const LayersMenu: React.FC<LayersMenuProps> = ({
         scrollbarWidth: 'thin',
         scrollbarColor: theme.palette.mode === 'dark' 
           ? 'rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05)' 
-          : 'rgba(0, 0, 0, 0.2) rgba(0, 0, 0, 0.05)',
-      }}>{/* Раздел Подложка */}
-        <Box sx={{ 
-          p: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold', flexShrink: 0 }}>
-            Подложка
-          </Typography>
-          <Box sx={{ 
-            flex: 1,
-            minHeight: 0,
-            overflow: 'auto',
-            maxHeight: '300px', // Ограничиваем высоту списка подложек
-            '&::-webkit-scrollbar': {
-              width: '4px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: theme.palette.mode === 'dark' 
-                ? 'rgba(255, 255, 255, 0.05)' 
-                : 'rgba(0, 0, 0, 0.05)',
-              borderRadius: '2px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: theme.palette.mode === 'dark' 
-                ? 'rgba(255, 255, 255, 0.2)' 
-                : 'rgba(0, 0, 0, 0.2)',
-              borderRadius: '2px',
-            },
-          }}>
-            <List dense>
-              {layerOptions.map((layer) => (
-                <ListItemButton
-                  key={layer.id}
-                  onClick={() => {
-                    onLayerSelect(layer.id);
-                  }}
-                  selected={currentLayer === layer.id}
-                  sx={{
-                    mb: 0.5,
-                    borderRadius: 1,
-                  }}
-                >
-                  <ListItemIcon>
-                    {layer.icon}
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={layer.name} 
-                    secondary={layer.description}
-                    primaryTypographyProps={{ fontWeight: currentLayer === layer.id ? 'bold' : 'normal' }}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          </Box>
-        </Box>
-
-        <Divider sx={{ mx: 2 }} />        {/* Дополнительные опции */}
-        <Box sx={{ 
-          px: 2, 
-          pb: 2,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <Typography variant="subtitle1" sx={{ px: 1, py: 0.5, fontWeight: 'bold', flexShrink: 0 }}>
-            Дополнительные слои
-          </Typography>
-          <Box sx={{ 
-            flex: 1,
-            minHeight: 0,
-            overflow: 'auto',
-            maxHeight: '150px', // Ограничиваем высоту дополнительных опций
-            '&::-webkit-scrollbar': {
-              width: '4px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: theme.palette.mode === 'dark' 
-                ? 'rgba(255, 255, 255, 0.05)' 
-                : 'rgba(0, 0, 0, 0.05)',
-              borderRadius: '2px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: theme.palette.mode === 'dark' 
-                ? 'rgba(255, 255, 255, 0.2)' 
-                : 'rgba(0, 0, 0, 0.2)',
-              borderRadius: '2px',
-            },
-          }}>
-            <FormGroup>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={false}
-                    size="small"
-                  />
-                }
-                label="Границы"
-                sx={{ mb: 0.5 }}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={false}
-                    size="small"
-                  />
-                }
-                label="Контуры"
-                sx={{ mb: 0.5 }}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={true}
-                    size="small"
-                  />
-                }
-                label="Подписи"
-                sx={{ mb: 0.5 }}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={false}
-                    size="small"
-                  />
-                }
-                label="Дороги"
-              />
-            </FormGroup>
-          </Box>
+          : 'rgba(0, 0, 0, 0.2) rgba(0, 0, 0, 0.05)',      }}>
+        <Box sx={{ p: 1 }}>
+          <List dense>
+            {layerOptions.map((layer) => (
+              <ListItemButton
+                key={layer.id}
+                onClick={() => {
+                  onLayerSelect(layer.id);
+                }}
+                selected={currentLayer === layer.id}
+                sx={{
+                  mb: 0.5,
+                  borderRadius: 1,
+                }}
+              >
+                <ListItemIcon>
+                  {layer.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={layer.name} 
+                  secondary={layer.description}
+                  primaryTypographyProps={{ fontWeight: currentLayer === layer.id ? 'bold' : 'normal' }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
         </Box>
       </Box>
     </Drawer>
