@@ -278,13 +278,107 @@ const HomePage: React.FC = () => {
       mapRef.current.navigateToPolygon(polygonIndex);
     }
   }, []);
-
   const handlePolygonPartZoom = useCallback((polygonIndex: number, partIndex: number) => {
     if (mapRef.current && mapRef.current.navigateToPolygonPart) {
       mapRef.current.navigateToPolygonPart(polygonIndex, partIndex);
     }
-  }, []);
+  }, []);  // State for tracking polygon part visibility
+  const [polygonPartVisibility, setPolygonPartVisibility] = useState<Map<number, Map<number, boolean>>>(new Map());
 
+  const handlePolygonPartToggleVisibility = useCallback((polygonIndex: number, partIndex: number) => {
+    if (mapRef.current && mapRef.current.setPolygonPartVisibilityByIndex) {
+      // Get current visibility state
+      const currentVisibility = polygonPartVisibility.get(polygonIndex)?.get(partIndex) ?? true;
+      const newVisibility = !currentVisibility;
+      
+      // Update state
+      setPolygonPartVisibility(prev => {
+        const newMap = new Map(prev);
+        let polygonParts = newMap.get(polygonIndex);
+        
+        if (!polygonParts) {
+          polygonParts = new Map();
+          newMap.set(polygonIndex, polygonParts);
+        }
+        
+        polygonParts.set(partIndex, newVisibility);
+        return newMap;
+      });
+      
+      // Update map
+      mapRef.current.setPolygonPartVisibilityByIndex(polygonIndex, partIndex, newVisibility);
+      
+      const action = newVisibility ? 'показана' : 'скрыта';
+      setSnackbarMessage(`Часть полигона ${action}`);
+      setSnackbarOpen(true);
+      
+      console.log(`Переключена видимость части ${partIndex} полигона ${polygonIndex} на ${newVisibility}`);
+    }
+  }, [polygonPartVisibility]);
+  // State for tracking currently hovered polygon part
+  const [hoveredPolygonPart, setHoveredPolygonPart] = useState<{polygonIndex: number, partIndex: number} | null>(null);
+
+  const handlePolygonPartHover = useCallback((polygonIndex: number, partIndex: number | null) => {
+    if (mapRef.current && mapRef.current.setPolygonPartHoverByIndex) {
+      // Clear previous hover if exists
+      if (hoveredPolygonPart) {
+        mapRef.current.setPolygonPartHoverByIndex(
+          hoveredPolygonPart.polygonIndex, 
+          hoveredPolygonPart.partIndex, 
+          false
+        );
+      }
+      
+      if (partIndex !== null) {
+        // Set new hover
+        mapRef.current.setPolygonPartHoverByIndex(polygonIndex, partIndex, true);
+        setHoveredPolygonPart({ polygonIndex, partIndex });
+      } else {
+        // Clear hover state
+        setHoveredPolygonPart(null);
+      }
+    }
+  }, [hoveredPolygonPart]);
+  const handlePolygonPartDelete = useCallback((polygonIndex: number, partIndex: number) => {
+    if (mapRef.current && mapRef.current.removePolygonPartByIndex) {
+      mapRef.current.removePolygonPartByIndex(polygonIndex, partIndex);
+      
+      // Обновляем состояние видимости частей после удаления
+      setPolygonPartVisibility(prev => {
+        const newMap = new Map(prev);
+        const polygonParts = newMap.get(polygonIndex);
+        
+        if (polygonParts) {
+          // Создаем новую карту частей с обновленными индексами
+          const newPolygonParts = new Map<number, boolean>();
+          
+          // Перемапим индексы с учетом удаленной части
+          polygonParts.forEach((visible, oldIndex) => {
+            if (oldIndex < partIndex) {
+              // Части до удаленной остаются с теми же индексами
+              newPolygonParts.set(oldIndex, visible);
+            } else if (oldIndex > partIndex) {
+              // Части после удаленной сдвигаются на один индекс назад
+              newPolygonParts.set(oldIndex - 1, visible);
+            }
+            // Удаленная часть (oldIndex === partIndex) не копируется
+          });
+          
+          if (newPolygonParts.size === 0) {
+            // Если не осталось частей, удаляем запись для полигона
+            newMap.delete(polygonIndex);
+          } else {
+            newMap.set(polygonIndex, newPolygonParts);
+          }
+        }
+        
+        return newMap;
+      });
+      
+      setSnackbarMessage('Часть полигона удалена');
+      setSnackbarOpen(true);
+    }
+  }, []);
   const handleClearAllFeatures = useCallback(() => {
     if (mapRef.current) {
       if (mapRef.current.clearAllFeatures) {
@@ -296,10 +390,17 @@ const HomePage: React.FC = () => {
       }
       setHasTemporaryRectangle(false);
       setAoiPolygons([]); // Очищаем список полигонов AOI
+      
+      // Очищаем состояние видимости частей MultiPolygon
+      setPolygonPartVisibility(new Map());
+      
+      // Очищаем состояние подсветки частей MultiPolygon
+      setHoveredPolygonPart(null);
+      
       setSnackbarMessage('Все объекты удалены');
       setSnackbarOpen(true);
     }
-  }, []);  const handleCloseSnackbar = useCallback(() => {
+  }, []);const handleCloseSnackbar = useCallback(() => {
     setSnackbarOpen(false);
   }, []);
 
@@ -898,10 +999,17 @@ const HomePage: React.FC = () => {
       return newVis;
     });
   }, [mapRef]);
-
   const handlePolygonDelete = useCallback((polygonIndex: number) => {
     if (mapRef.current && mapRef.current.removePolygonByIndex) {
       mapRef.current.removePolygonByIndex(polygonIndex);
+      
+      // Очищаем состояние видимости частей для удаленного полигона
+      setPolygonPartVisibility(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(polygonIndex);
+        return newMap;
+      });
+      
       setSnackbarMessage('Полигон удалён');
       setSnackbarOpen(true);
     }
@@ -1057,8 +1165,11 @@ const HomePage: React.FC = () => {
           hoveredPolygonIndex={hoveredPolygonIndex}
           onPolygonZoom={handlePolygonZoom}
           onTerritoryPolygonAdd={handleTerritoryPolygonAdd}
-          onPolygonPartZoom={handlePolygonPartZoom}
-        />
+          onPolygonPartZoom={handlePolygonPartZoom}        onPolygonPartToggleVisibility={handlePolygonPartToggleVisibility}
+        onPolygonPartHover={handlePolygonPartHover}
+        onPolygonPartDelete={handlePolygonPartDelete}
+        polygonPartVisibility={polygonPartVisibility}
+      />
         
         <SearchMenu
           open={searchMenuOpen}

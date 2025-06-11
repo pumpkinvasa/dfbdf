@@ -43,6 +43,9 @@ export interface OpenLayersMapHandle {
   setPolygonVisibilityByIndex: (index: number, visible: boolean) => void;  setPolygonHoverByIndex: (index: number, hovered: boolean) => void; // Новая функция для установки наведения
   addGeoJSONFeature: (geoJSON: any) => void; // Добавить GeoJSON фичу на карту
   navigateToPolygonPart: (polygonIndex: number, partIndex: number) => void; // Навигация к части MultiPolygon
+  setPolygonPartVisibilityByIndex: (polygonIndex: number, partIndex: number, visible: boolean) => void; // Видимость части
+  setPolygonPartHoverByIndex: (polygonIndex: number, partIndex: number, hovered: boolean) => void; // Подсветка части
+  removePolygonPartByIndex: (polygonIndex: number, partIndex: number) => void; // Удаление части
 }
 
 interface OpenLayersMapProps {
@@ -105,9 +108,100 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
     const theme = useTheme();
     const temporaryFeatureRef = useRef<Feature | null>(null);
     const overlayRef = useRef<Overlay | null>(null);
-    const temporaryDivRef = useRef<HTMLDivElement | null>(null);
-    const imageLayerRef = useRef<ImageLayer<Static> | null>(null);
+    const temporaryDivRef = useRef<HTMLDivElement | null>(null);    const imageLayerRef = useRef<ImageLayer<Static> | null>(null);
     const loadedPolygonsRef = useRef<Feature[]>([]);
+    
+    // Функция для определения, нужно ли разбивать мультиполигон на части
+    const shouldShowPolygonParts = (feature: Feature, geometry: MultiPolygon): boolean => {
+      // Получаем количество частей
+      const partsCount = geometry.getPolygons().length;
+      
+      // Если только одна часть, то не разбиваем
+      if (partsCount <= 1) return false;
+      
+      // Получаем свойства фичи
+      const properties = feature.getProperties();
+      const polygonType = properties?.type?.toLowerCase();
+      const polygonName = properties?.name?.toLowerCase() || '';
+      const polygonParent = properties?.parent?.toLowerCase() || '';
+      
+      // Не разбиваем административные единицы на части (регионы, области, края и т.д.)
+      if (polygonType === 'state' || polygonType === 'region' || polygonType === 'province') {
+        return false;
+      }
+      
+      // Дополнительная проверка по названиям для всех административных единиц
+      const administrativeKeywords = [
+        'область', 'край', 'республика', 'округ', 'region', 'state', 'province',
+        'prefecture', 'county', 'district', 'федеральный округ', 'автономный округ',
+        'губерния', 'воеводство', 'земля', 'кантон', 'штат', 'департамент'
+      ];
+      
+      const isAdministrativeUnit = administrativeKeywords.some(keyword => 
+        polygonName.includes(keyword) || polygonParent.includes(keyword)
+      );
+      
+      if (isAdministrativeUnit) {
+        return false;
+      }
+      
+      // Проверяем, является ли это страной с административными единицами
+      if (polygonType === 'country' || polygonName.includes('страна') || polygonParent === '') {
+        // Если у страны слишком много частей (больше 10), это скорее всего административные единицы
+        if (partsCount > 10) {
+          return false;
+        }
+        
+        // Для стран с небольшим количеством частей проверяем, действительно ли части географически разделены
+        const polygons = geometry.getPolygons();
+        
+        if (polygons.length === 2) {
+          // Вычисляем центры масс для двух частей
+          const centers = polygons.map(poly => {
+            const extent = poly.getExtent();
+            return [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
+          });
+          
+          // Преобразуем в географические координаты
+          const [center1, center2] = centers.map(center => toLonLat(center));
+          
+          // Вычисляем расстояние между центрами
+          const distance = Math.sqrt(
+            Math.pow(center1[0] - center2[0], 2) + Math.pow(center1[1] - center2[1], 2)
+          );
+          
+          // Если расстояние больше 5 градусов, считаем это географически разделенными территориями
+          return distance > 5;
+        }
+        
+        // Для случаев с 3-10 частями проверяем более строго
+        if (polygons.length >= 3 && polygons.length <= 10) {
+          // Проверяем, есть ли действительно удаленные части
+          const centers = polygons.map(poly => {
+            const extent = poly.getExtent();
+            return toLonLat([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2]);
+          });
+          
+          // Находим максимальное расстояние между частями
+          let maxDistance = 0;
+          for (let i = 0; i < centers.length; i++) {
+            for (let j = i + 1; j < centers.length; j++) {
+              const distance = Math.sqrt(
+                Math.pow(centers[i][0] - centers[j][0], 2) + 
+                Math.pow(centers[i][1] - centers[j][1], 2)
+              );
+              maxDistance = Math.max(maxDistance, distance);
+            }
+          }
+          
+          // Показываем части только если есть действительно удаленные территории
+          return maxDistance > 8;
+        }
+      }
+      
+      // По умолчанию не показываем части
+      return false;
+    };
     
     // Дебаунсинг для обновления центра полигона
     const updatePolygonCenterDebounced = useCallback(() => {
@@ -462,49 +556,100 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
               overflow: true,
             }),
           })
-        );
-      } else if (geometry instanceof MultiPolygon) {
-        // Основной стиль для мультиполигона
-        styles.push(
-          new Style({
-            stroke: new Stroke({
-              color: '#00b3b3',
-              width: 2,
-            }),
-          })
-        );
-
-        // Вычисляем общую площадь всех полигонов
-        const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
-        const areaKm2 = (areaM2 / 1_000_000).toFixed(2);
-
-        // Добавляем точки на углах для каждого полигона в мультиполигоне
-        const polygons = geometry.getPolygons();
-        polygons.forEach(polygon => {
-          const coordinates = polygon.getCoordinates()[0] as Coordinate[];
-          coordinates.slice(0, -1).forEach((coord: Coordinate) => {
+        );      } else if (geometry instanceof MultiPolygon) {
+        // Проверяем, нужно ли разбивать MultiPolygon на части
+        const shouldShowParts = shouldShowPolygonParts(feature, geometry);
+        
+        if (shouldShowParts) {
+          // Получаем полигоны из MultiPolygon и отображаем каждую часть отдельно
+          const polygons = geometry.getPolygons();
+          
+          // Добавляем стили для каждого видимого полигона в мультиполигоне
+          polygons.forEach((polygon, index) => {
+            // Проверяем видимость конкретной части
+            const partVisibilityKey = `part_${index}_visible`;
+            const isPartVisible = feature.get(partVisibilityKey);
+            
+            // Если видимость части явно установлена в false, пропускаем её
+            if (isPartVisible === false) {
+              return;
+            }
+            
+            // Основной стиль для каждого полигона в мультиполигоне
             styles.push(
               new Style({
-                geometry: new Point(coord),
-                image: new CircleStyle({
-                  radius: 4,
-                  fill: new Fill({
-                    color: '#ffffff',
-                  }),
-                  stroke: new Stroke({
-                    color: '#00b3b3',
-                    width: 2,
-                  }),
+                geometry: polygon, // Применяем стиль к конкретному полигону
+                stroke: new Stroke({
+                  color: '#00b3b3',
+                  width: 2,
                 }),
               })
             );
+
+            // Добавляем точки на углах для каждого видимого полигона
+            const coordinates = polygon.getCoordinates()[0] as Coordinate[];
+            coordinates.slice(0, -1).forEach((coord: Coordinate) => {
+              styles.push(
+                new Style({
+                  geometry: new Point(coord),
+                  image: new CircleStyle({
+                    radius: 4,
+                    fill: new Fill({
+                      color: '#ffffff',
+                    }),
+                    stroke: new Stroke({
+                      color: '#00b3b3',
+                      width: 2,
+                    }),
+                  }),
+                })
+              );
+            });
           });
-        });
+        } else {
+          // Отображаем MultiPolygon как единый полигон
+          styles.push(
+            new Style({
+              stroke: new Stroke({
+                color: '#00b3b3',
+                width: 2,
+              }),
+            })
+          );
+
+          // Добавляем точки на углах для всех внешних контуров
+          const polygons = geometry.getPolygons();
+          polygons.forEach(polygon => {
+            const coordinates = polygon.getCoordinates()[0] as Coordinate[];
+            coordinates.slice(0, -1).forEach((coord: Coordinate) => {
+              styles.push(
+                new Style({
+                  geometry: new Point(coord),
+                  image: new CircleStyle({
+                    radius: 4,
+                    fill: new Fill({
+                      color: '#ffffff',
+                    }),
+                    stroke: new Stroke({
+                      color: '#00b3b3',
+                      width: 2,
+                    }),
+                  }),
+                })
+              );
+            });
+          });
+        }        // Вычисляем общую площадь всех полигонов
+        const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
+        const areaKm2 = (areaM2 / 1_000_000).toFixed(2);
 
         // Для метки с площадью используем центр экстента всего мультиполигона
         const extent = geometry.getExtent();
         const centerX = (extent[0] + extent[2]) / 2;
         const centerY = (extent[1] + extent[3]) / 2;
+        
+        // Получаем количество полигонов для метки
+        const polygons = geometry.getPolygons();
         
         styles.push(
           new Style({
@@ -526,13 +671,14 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       return styles;
     };
   };
-
   // Стиль для выделения полигона при наведении
   const createHoverStyle = () => {
     return (feature: any) => {
       const styles: Style[] = [];
-      const geometry = feature.getGeometry();      if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
-        // Основной стиль для выделения (жирная/яркая обводка)
+      const geometry = feature.getGeometry();
+
+      if (geometry instanceof Polygon) {
+        // Основной стиль для выделения полигона (жирная/яркая обводка)
         styles.push(
           new Style({
             stroke: new Stroke({
@@ -544,7 +690,36 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             }),
           })
         );
+      } else if (geometry instanceof MultiPolygon) {
+        // Для MultiPolygon применяем выделение ко всем видимым частям
+        const polygons = geometry.getPolygons();
+        
+        polygons.forEach((polygon, index) => {
+          // Проверяем видимость конкретной части
+          const partVisibilityKey = `part_${index}_visible`;
+          const isPartVisible = feature.get(partVisibilityKey);
+          
+          // Если видимость части явно установлена в false, пропускаем её
+          if (isPartVisible === false) {
+            return;
+          }
+          
+          // Основной стиль для выделения каждого видимого полигона
+          styles.push(
+            new Style({
+              geometry: polygon, // Применяем стиль к конкретному полигону
+              stroke: new Stroke({
+                color: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+                width: 4,
+              }),
+              fill: new Fill({
+                color: 'rgba(0,229,197,0.08)', // легкая подсветка
+              }),
+            })
+          );
+        });
       }
+      
       return styles;
     };
   };
@@ -1727,9 +1902,171 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           
           // Обновляем центр полигона
           schedulePolygonCenterUpdate();
-          
-        } catch (error) {
+            } catch (error) {
           console.error('Error adding GeoJSON feature:', error);
+        }
+      },
+      
+      // Методы для работы с частями MultiPolygon
+      setPolygonPartVisibilityByIndex: (polygonIndex: number, partIndex: number, visible: boolean) => {
+        if (!vectorSourceRef.current) return;
+        const features = vectorSourceRef.current.getFeatures();
+        if (polygonIndex < 0 || polygonIndex >= features.length) return;
+        
+        const feature = features[polygonIndex];
+        const geometry = feature.getGeometry();
+        
+        if (geometry instanceof MultiPolygon) {
+          // Для MultiPolygon храним видимость частей в свойствах фичи
+          const partVisibilityKey = `part_${partIndex}_visible`;
+          feature.set(partVisibilityKey, visible);
+          
+          // Пересоздаем стиль с учетом видимости частей
+          const customStyle = createVectorStyle();
+          feature.setStyle(customStyle);
+          
+          console.log(`Set part ${partIndex} of polygon ${polygonIndex} visibility to ${visible}`);
+        }
+      },
+        setPolygonPartHoverByIndex: (polygonIndex: number, partIndex: number, hovered: boolean) => {
+        if (!vectorSourceRef.current) return;
+        const features = vectorSourceRef.current.getFeatures();
+        if (polygonIndex < 0 || polygonIndex >= features.length) return;
+        
+        const feature = features[polygonIndex];
+        const geometry = feature.getGeometry();
+        
+        if (geometry instanceof MultiPolygon) {
+          if (hovered) {
+            // Создаем специальный стиль для выделения конкретной части
+            const polygons = geometry.getPolygons();
+            if (partIndex >= 0 && partIndex < polygons.length) {
+              const styles: Style[] = [];
+              
+              // Добавляем обычные стили для всех частей
+              polygons.forEach((polygon, index) => {
+                // Проверяем видимость конкретной части
+                const partVisibilityKey = `part_${index}_visible`;
+                const isPartVisible = feature.get(partVisibilityKey);
+                
+                // Если видимость части явно установлена в false, пропускаем её
+                if (isPartVisible === false) {
+                  return;
+                }
+                
+                if (index === partIndex) {
+                  // Выделяем конкретную часть
+                  styles.push(
+                    new Style({
+                      geometry: polygon,
+                      stroke: new Stroke({
+                        color: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+                        width: 4,
+                      }),
+                      fill: new Fill({
+                        color: 'rgba(0,229,197,0.15)', // более заметная подсветка для выбранной части
+                      }),
+                    })
+                  );
+                } else {
+                  // Обычный стиль для остальных частей
+                  styles.push(
+                    new Style({
+                      geometry: polygon,
+                      stroke: new Stroke({
+                        color: '#00b3b3',
+                        width: 2,
+                      }),
+                    })
+                  );
+                }
+              });
+              
+              feature.setStyle(styles);
+            }
+          } else {
+            // Возвращаем обычный стиль
+            const visible = feature.get('visible');
+            if (typeof visible === 'boolean' && visible === false) {
+              feature.setStyle(() => undefined);
+            } else {
+              feature.setStyle(createVectorStyle()(feature));
+            }
+          }
+          
+          console.log(`Set part ${partIndex} of polygon ${polygonIndex} hover to ${hovered}`);
+        }
+      },
+        removePolygonPartByIndex: (polygonIndex: number, partIndex: number) => {
+        if (!vectorSourceRef.current) return;
+        const features = vectorSourceRef.current.getFeatures();
+        if (polygonIndex < 0 || polygonIndex >= features.length) return;
+        
+        const feature = features[polygonIndex];
+        const geometry = feature.getGeometry();
+        
+        if (geometry instanceof MultiPolygon) {
+          const polygons = geometry.getPolygons();
+          if (partIndex < 0 || partIndex >= polygons.length) return;
+          
+          // Создаем новый MultiPolygon без удаляемой части
+          const remainingPolygons = polygons.filter((_, idx) => idx !== partIndex);
+          
+          if (remainingPolygons.length === 0) {
+            // Если не осталось частей, удаляем весь полигон
+            vectorSourceRef.current.removeFeature(feature);
+          } else if (remainingPolygons.length === 1) {
+            // Если осталась одна часть, конвертируем в обычный Polygon
+            feature.setGeometry(remainingPolygons[0]);
+            
+            // Очищаем все свойства видимости частей, так как теперь это обычный Polygon
+            const properties = feature.getProperties();
+            Object.keys(properties).forEach(key => {
+              if (key.startsWith('part_') && key.endsWith('_visible')) {
+                feature.unset(key);
+              }
+            });
+          } else {
+            // Создаем новый MultiPolygon из оставшихся частей
+            const newMultiPolygon = new MultiPolygon(remainingPolygons.map(p => p.getCoordinates()));
+            feature.setGeometry(newMultiPolygon);
+            
+            // Обновляем индексы видимости частей
+            const properties = feature.getProperties();
+            const oldPartVisibility: { [key: number]: boolean } = {};
+            
+            // Сохраняем старые настройки видимости
+            Object.keys(properties).forEach(key => {
+              if (key.startsWith('part_') && key.endsWith('_visible')) {
+                const index = parseInt(key.replace('part_', '').replace('_visible', ''));
+                if (!isNaN(index)) {
+                  oldPartVisibility[index] = properties[key];
+                }
+                feature.unset(key);
+              }
+            });
+            
+            // Перемапим видимость с учетом удаленной части
+            Object.keys(oldPartVisibility).forEach(oldIndexStr => {
+              const oldIndex = parseInt(oldIndexStr);
+              if (oldIndex > partIndex) {
+                // Части после удаленной сдвигаются на один индекс назад
+                const newIndex = oldIndex - 1;
+                feature.set(`part_${newIndex}_visible`, oldPartVisibility[oldIndex]);
+              } else if (oldIndex < partIndex) {
+                // Части до удаленной остаются с теми же индексами
+                feature.set(`part_${oldIndex}_visible`, oldPartVisibility[oldIndex]);
+              }
+              // Удаленная часть (oldIndex === partIndex) не копируется
+            });
+          }
+          
+          // Обновляем количество фич
+          if (onFeatureCountChange) {
+            onFeatureCountChange(vectorSourceRef.current.getFeatures().length);
+          }
+          
+          console.log(`Removed part ${partIndex} from polygon ${polygonIndex}`);
         }
       },
     }),
