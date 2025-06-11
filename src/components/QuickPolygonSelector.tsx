@@ -46,27 +46,109 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
   const [searchValue, setSearchValue] = useState('');
   const [territories, setTerritories] = useState<Territory[]>([]);
   const [filteredTerritories, setFilteredTerritories] = useState<Territory[]>([]);
-  const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
-  // Загрузка предустановленных территорий
+  const [selectedCountry, setSelectedCountry] = useState<Territory | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<Territory | null>(null);
+  const [availableRegions, setAvailableRegions] = useState<Territory[]>([]);
+  const [step, setStep] = useState<'country' | 'region'>('country');  // Загрузка предустановленных территорий
   useEffect(() => {
     const predefinedTerritories: Territory[] = Object.values(TERRITORY_BOUNDARIES);
     setTerritories(predefinedTerritories);
-    setFilteredTerritories(predefinedTerritories);
+    
+    // Показываем только страны на первом шаге
+    const countries = predefinedTerritories.filter(t => t.type === 'country');
+    setFilteredTerritories(countries);
   }, []);
 
   // Фильтрация территорий при изменении поискового запроса
   useEffect(() => {
-    if (!searchValue.trim()) {
-      setFilteredTerritories(territories);
-      return;
+    if (step === 'country') {
+      const countries = territories.filter(t => t.type === 'country');
+      if (!searchValue.trim()) {
+        setFilteredTerritories(countries);
+      } else {
+        const filtered = countries.filter(territory =>
+          territory.name.toLowerCase().includes(searchValue.toLowerCase())
+        );
+        setFilteredTerritories(filtered);
+      }
+    } else if (step === 'region') {
+      if (!searchValue.trim()) {
+        setFilteredTerritories(availableRegions);
+      } else {
+        const filtered = availableRegions.filter(territory =>
+          territory.name.toLowerCase().includes(searchValue.toLowerCase())
+        );
+        setFilteredTerritories(filtered);
+      }
     }
+  }, [searchValue, territories, step, availableRegions]);
 
-    const filtered = territories.filter(territory =>
-      territory.name.toLowerCase().includes(searchValue.toLowerCase()) ||
-      territory.parent?.toLowerCase().includes(searchValue.toLowerCase())
-    );
-    setFilteredTerritories(filtered);
-  }, [searchValue, territories]);
+  // Обработка выбора страны
+  const handleCountrySelect = (country: Territory | null) => {
+    setSelectedCountry(country);
+    setSearchValue('');
+    
+    if (country) {
+      // Находим все регионы для выбранной страны
+      const regions = territories.filter(t => 
+        t.type === 'state' && t.parent === country.name
+      );
+      setAvailableRegions(regions);
+      
+      if (regions.length > 0) {
+        // Переходим к выбору региона
+        setStep('region');
+        setFilteredTerritories(regions);
+      } else {
+        // Если нет регионов, создаем полигон страны
+        handleFinalSelect(country);
+      }
+    }
+  };
+
+  // Обработка выбора региона
+  const handleRegionSelect = (region: Territory | null) => {
+    setSelectedRegion(region);
+  };
+
+  // Обработка возврата к выбору страны
+  const handleBackToCountry = () => {
+    setStep('country');
+    setSelectedRegion(null);
+    setAvailableRegions([]);
+    setSearchValue('');
+    const countries = territories.filter(t => t.type === 'country');
+    setFilteredTerritories(countries);
+  };
+
+  // Финальный выбор территории
+  const handleFinalSelect = async (territory: Territory) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      let territoryWithCoordinates: Territory;
+
+      if (territory.coordinates) {
+        territoryWithCoordinates = territory;
+      } else if (territory.bbox) {
+        // Создаем простой прямоугольный полигон из bbox
+        territoryWithCoordinates = {
+          ...territory,
+          coordinates: [createPolygonFromBbox(territory.bbox)]
+        };
+      } else {
+        throw new Error('Координаты территории недоступны');
+      }
+
+      onTerritorySelect(territoryWithCoordinates);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка при создании полигона');
+    } finally {
+      setLoading(false);
+    }
+  };
   // Создание полигона из bbox - уберем эту функцию, так как она теперь в сервисе
   // const createPolygonFromBbox = ...
 
@@ -105,42 +187,42 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
         return 'Город';
     }
   };
-
   const handleSelect = async () => {
-    if (!selectedTerritory) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      let territoryWithCoordinates: Territory;
-
-      if (selectedTerritory.coordinates) {
-        territoryWithCoordinates = selectedTerritory;
-      } else if (selectedTerritory.bbox) {
-        // Создаем простой прямоугольный полигон из bbox
-        territoryWithCoordinates = {
-          ...selectedTerritory,
-          coordinates: [createPolygonFromBbox(selectedTerritory.bbox)]
-        };
-      } else {
-        throw new Error('Координаты территории недоступны');
-      }
-
-      onTerritorySelect(territoryWithCoordinates);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка при создании полигона');
-    } finally {
-      setLoading(false);
-    }
+    const targetTerritory = selectedRegion || selectedCountry;
+    if (!targetTerritory) return;
+    
+    await handleFinalSelect(targetTerritory);
   };
 
   const handleClose = () => {
-    setSelectedTerritory(null);
+    setSelectedCountry(null);
+    setSelectedRegion(null);
+    setStep('country');
     setSearchValue('');
     setError(null);
+    const countries = territories.filter(t => t.type === 'country');
+    setFilteredTerritories(countries);
     onClose();
+  };
+
+  const getCurrentSelection = () => {
+    return step === 'country' ? selectedCountry : selectedRegion;
+  };
+
+  const getStepTitle = () => {
+    if (step === 'country') {
+      return 'Выберите страну';
+    } else {
+      return `Выберите область в стране: ${selectedCountry?.name}`;
+    }
+  };
+
+  const getPlaceholder = () => {
+    if (step === 'country') {
+      return 'Введите название страны...';
+    } else {
+      return 'Введите название области...';
+    }
   };
 
   return (
@@ -155,8 +237,7 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
           backgroundImage: 'none',
         }
       }}
-    >
-      <DialogTitle>
+    >      <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <PublicIcon color="primary" />
           <Typography variant="h6">
@@ -164,26 +245,49 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
           </Typography>
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Выберите страну, область или город для создания полигона
+          {getStepTitle()}
         </Typography>
       </DialogTitle>
 
       <DialogContent>
+        {/* Кнопка возврата к выбору страны */}
+        {step === 'region' && (
+          <Box sx={{ mb: 2 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleBackToCountry}
+              sx={{ mb: 1 }}
+            >
+              ← Назад к выбору страны
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Выбранная страна: <strong>{selectedCountry?.name}</strong>
+            </Typography>
+          </Box>
+        )}
+
         <Box sx={{ mb: 2 }}>
           <Autocomplete
             options={filteredTerritories}
             getOptionLabel={(option) => option.name}
-            value={selectedTerritory}
-            onChange={(_, value) => setSelectedTerritory(value)}
+            value={getCurrentSelection()}
+            onChange={(_, value) => {
+              if (step === 'country') {
+                handleCountrySelect(value);
+              } else {
+                handleRegionSelect(value);
+              }
+            }}
             inputValue={searchValue}
             onInputChange={(_, value) => setSearchValue(value)}
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Поиск территории"
+                label={step === 'country' ? 'Поиск страны' : 'Поиск области'}
                 variant="outlined"
                 fullWidth
-                placeholder="Введите название страны, области или города..."
+                placeholder={getPlaceholder()}
               />
             )}
             renderOption={(props, option) => (
@@ -209,35 +313,46 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
                 </Box>
               </Box>
             )}
-            noOptionsText="Территории не найдены"
+            noOptionsText={step === 'country' ? 'Страны не найдены' : 'Области не найдены'}
             loading={loading}
           />
         </Box>
 
-        {selectedTerritory && (
+        {/* Информация о выбранной территории */}
+        {step === 'region' && availableRegions.length === 0 && selectedCountry && (
+          <Box sx={{ p: 2, bgcolor: theme.palette.action.hover, borderRadius: 1, mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Информация:
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Для страны "{selectedCountry.name}" нет доступных областей. Будет создан полигон всей страны.
+            </Typography>
+          </Box>
+        )}
+
+        {getCurrentSelection() && (
           <Box sx={{ p: 2, bgcolor: theme.palette.action.hover, borderRadius: 1 }}>
             <Typography variant="subtitle2" gutterBottom>
               Выбранная территория:
             </Typography>
             <Box display="flex" alignItems="center" gap={1} mb={1}>
-              {getTypeIcon(selectedTerritory.type)}
+              {getTypeIcon(getCurrentSelection()!.type)}
               <Typography variant="body1" fontWeight="medium">
-                {selectedTerritory.name}
+                {getCurrentSelection()!.name}
               </Typography>
               <Chip
-                label={getTypeName(selectedTerritory.type)}
+                label={getTypeName(getCurrentSelection()!.type)}
                 size="small"
-                color={getTypeColor(selectedTerritory.type)}
+                color={getTypeColor(getCurrentSelection()!.type)}
               />
             </Box>
-            {selectedTerritory.parent && (
+            {getCurrentSelection()!.parent && (
               <Typography variant="body2" color="text.secondary">
-                Входит в: {selectedTerritory.parent}
+                Входит в: {getCurrentSelection()!.parent}
               </Typography>
-            )}
-            {selectedTerritory.bbox && (
+            )}            {getCurrentSelection()!.bbox && (
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                Координаты: {selectedTerritory.bbox.map(coord => coord.toFixed(4)).join(', ')}
+                Координаты: {getCurrentSelection()!.bbox!.map((coord: number) => coord.toFixed(4)).join(', ')}
               </Typography>
             )}
           </Box>
@@ -254,13 +369,33 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
         <Button onClick={handleClose} disabled={loading}>
           Отмена
         </Button>
+        
+        {/* Кнопка для создания полигона страны, когда есть области */}
+        {step === 'region' && availableRegions.length > 0 && (
+          <Button
+            onClick={() => selectedCountry && handleFinalSelect(selectedCountry)}
+            disabled={!selectedCountry || loading}
+            variant="outlined"
+          >
+            Создать полигон страны
+          </Button>
+        )}
+        
+        {/* Кнопка продолжения/создания */}
         <Button
           onClick={handleSelect}
           variant="contained"
-          disabled={!selectedTerritory || loading}
+          disabled={!getCurrentSelection() || loading}
           startIcon={loading ? <CircularProgress size={20} /> : undefined}
         >
-          {loading ? 'Создание...' : 'Создать полигон'}
+          {loading 
+            ? 'Создание...' 
+            : step === 'country' && availableRegions.length === 0 && selectedCountry
+              ? 'Создать полигон'
+              : step === 'region'
+                ? 'Создать полигон области'
+                : 'Продолжить'
+          }
         </Button>
       </DialogActions>
     </Dialog>
