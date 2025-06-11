@@ -300,11 +300,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             }),
           });
       }
-    };    // Создание overlay слоев
+    };    
     const createOverlayLayers = (layerType: string) => {
       const layers: { [key: string]: TileLayer } = {};
 
-      // Настройки производительности для overlay слоев
       const overlayOptions = {
         preload: 0, // Не предзагружаем overlay слои
         maxZoom: 18,

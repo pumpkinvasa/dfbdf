@@ -16,6 +16,7 @@ import RightSidebar from '../components/RightSidebar';
 import LayersMenu, { LayerType } from '../components/LayersMenu';
 import AOIMenu, { CompositeType, SatelliteType } from '../components/AOIMenu';
 import SearchMenu, { SearchType } from '../components/SearchMenu';
+import DashboardMenu from '../components/DashboardMenu';
 import OpenLayersMap, { OpenLayersMapHandle } from '../components/OpenLayersMap';
 import SearchLocation from '../components/SearchLocation';
 import FileUploadDialog from '../components/FileUploadDialog';
@@ -42,12 +43,12 @@ const HomePage: React.FC = () => {
   const [activeDrawingTool, setActiveDrawingTool] = useState<'polygon' | 'rectangle' | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');  const [featureCount, setFeatureCount] = useState(0);  const [aoiPolygons, setAoiPolygons] = useState<any[]>([]);
-  
-  // Отладочное логирование состояния полигонов
+    // Отладочное логирование состояния полигонов
   useEffect(() => {
     console.log('Состояние aoiPolygons изменилось:', aoiPolygons);
   }, [aoiPolygons]);
 
+  const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);const [compositesMenuOpen, setCompositesMenuOpen] = useState(false);
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<LayerType>('OSM');
@@ -293,11 +294,20 @@ const HomePage: React.FC = () => {
       setSnackbarMessage('Все объекты удалены');
       setSnackbarOpen(true);
     }
-  }, []);
-  const handleCloseSnackbar = useCallback(() => {
+  }, []);  const handleCloseSnackbar = useCallback(() => {
     setSnackbarOpen(false);
   }, []);
 
+  const handleDashboardClick = useCallback(() => {
+    setDashboardMenuOpen((prev) => !prev);
+    setLayersMenuOpen(false);
+    setCompositesMenuOpen(false);
+    setSearchMenuOpen(false);
+  }, []);
+  const handleDashboardMenuClose = useCallback(() => {
+    setDashboardMenuOpen(false);
+  }, []);
+  
   const handleLayersClick = useCallback(() => {
     setLayersMenuOpen(true);
     setCompositesMenuOpen(false);
@@ -322,8 +332,8 @@ const HomePage: React.FC = () => {
       if (mapRef.current && mapRef.current.disableDrawingMode) {
         mapRef.current.disableDrawingMode();
       }
-    }
-  }, [activeDrawingTool]);
+    }  }, [activeDrawingTool]);
+  
   const handleCompositesMenuClose = useCallback(() => {
     setCompositesMenuOpen(false);
   }, []);
@@ -957,11 +967,12 @@ const HomePage: React.FC = () => {
           flexGrow: 1,
           mt: '64px',
           overflow: 'hidden',
-        }}
-      >        <LeftSidebar 
+        }}      >        <LeftSidebar 
+          onDashboardClick={handleDashboardClick}
           onLayersClick={handleLayersClick}
           onCompositesClick={handleCompositesClick}
           onSearchClick={handleSearchClick}
+          dashboardMenuOpen={dashboardMenuOpen}
           layersMenuOpen={layersMenuOpen}
           compositesMenuOpen={compositesMenuOpen}
           searchMenuOpen={searchMenuOpen}
@@ -1007,14 +1018,6 @@ const HomePage: React.FC = () => {
           onClose={handleLayersMenuClose}
           onLayerSelect={handleLayerSelect}
           currentLayer={currentLayer}
-          aoiPolygons={aoiPolygons}
-          onPolygonSelect={handlePolygonSelect}
-          onPolygonToggleVisibility={handlePolygonToggleVisibility}
-          onPolygonDelete={handlePolygonDelete}
-          polygonVisibility={polygonVisibility}
-          onPolygonHover={handlePolygonHover}
-          hoveredPolygonIndex={hoveredPolygonIndex}
-          onPolygonZoom={handlePolygonZoom}
         /><AOIMenu
           open={compositesMenuOpen}
           onClose={handleCompositesMenuClose}
@@ -1023,7 +1026,21 @@ const HomePage: React.FC = () => {
           onFileUpload={handleFileUpload}
           currentComposite={currentComposite}
           currentSatellite={currentSatellite}
-        />        <SearchMenu
+        />
+          <DashboardMenu
+          open={dashboardMenuOpen}
+          onClose={handleDashboardMenuClose}
+          aoiPolygons={aoiPolygons}
+          onPolygonSelect={handlePolygonSelect}
+          onPolygonToggleVisibility={handlePolygonToggleVisibility}
+          onPolygonDelete={handlePolygonDelete}
+          polygonVisibility={polygonVisibility}
+          onPolygonHover={handlePolygonHover}
+          hoveredPolygonIndex={hoveredPolygonIndex}
+          onPolygonZoom={handlePolygonZoom}
+        />
+        
+        <SearchMenu
           open={searchMenuOpen}
           onClose={handleSearchMenuClose}
           onSearchSelect={handleSearchSelect}

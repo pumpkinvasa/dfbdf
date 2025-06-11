@@ -22,25 +22,31 @@ interface TabContent {
 }
 
 interface LeftSidebarProps {
+  onDashboardClick?: () => void;
   onLayersClick?: () => void;
   onCompositesClick?: () => void;
   onSearchClick?: () => void;
+  dashboardMenuOpen?: boolean;
   layersMenuOpen?: boolean;
   compositesMenuOpen?: boolean;
   searchMenuOpen?: boolean;
 }
 
 const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
+  onDashboardClick,
   onLayersClick, 
   onCompositesClick,
   onSearchClick,
+  dashboardMenuOpen,
   layersMenuOpen,
   compositesMenuOpen,
   searchMenuOpen
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
-  const theme = useTheme();
-  useEffect(() => {
+  const theme = useTheme();  useEffect(() => {
+    if (!dashboardMenuOpen && selectedTab === 0) {
+      setSelectedTab(0);
+    }
     if (!layersMenuOpen && selectedTab === 1) {
       setSelectedTab(0);
     }
@@ -50,19 +56,18 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     if (!searchMenuOpen && selectedTab === 3) {
       setSelectedTab(0);
     }
-  }, [layersMenuOpen, compositesMenuOpen, searchMenuOpen, selectedTab]);
-
+  }, [dashboardMenuOpen, layersMenuOpen, compositesMenuOpen, searchMenuOpen, selectedTab]);
   const tabs: TabContent[] = [
     {
-      title: 'Панель управления',
+      title: 'Управление AOI',
       icon: <DashboardIcon />,
       content: (
         <Box p={3}>
-          <h5>Панель управления</h5>
-          <p>Здесь вы можете управлять основными функциями и просматривать статистику.</p>
+          <h5>Управление AOI</h5>
+          <p>Здесь вы можете управлять зонами AOI и просматривать статистику.</p>
         </Box>
       ),
-    },    {
+    },{
       title: 'Слои',
       icon: <LayersIcon />,
       content: (
@@ -144,6 +149,10 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 <ListItemButton
                   selected={selectedTab === index}                  onClick={() => {
                     setSelectedTab(index);
+                    // Если это кнопка панели управления (индекс 0), вызываем onDashboardClick
+                    if (index === 0 && onDashboardClick) {
+                      onDashboardClick();
+                    }
                     // Если это кнопка слоев (индекс 1), вызываем onLayersClick
                     if (index === 1 && onLayersClick) {
                       onLayersClick();
