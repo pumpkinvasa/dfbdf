@@ -17,7 +17,7 @@ import {
 import PublicIcon from '@mui/icons-material/Public';
 import LocationCityIcon from '@mui/icons-material/LocationCity';
 import MapIcon from '@mui/icons-material/Map';
-import { TERRITORY_BOUNDARIES, TerritoryBounds, createPolygonFromBbox } from '../utils/territoryService';
+import { TerritoryBounds, createPolygonFromBbox, getTerritoryBounds } from '../utils/territoryService';
 
 interface Territory {
   name: string;
@@ -50,14 +50,36 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
   const [selectedRegion, setSelectedRegion] = useState<Territory | null>(null);
   const [availableRegions, setAvailableRegions] = useState<Territory[]>([]);
   const [step, setStep] = useState<'country' | 'region'>('country');  // Загрузка предустановленных территорий
+
+  // --- Жёстко заданный список стран ---
+  const staticCountries: Territory[] = [
+    { name: 'Россия', type: 'country', countryCode: 'RU' },
+    { name: 'Украина', type: 'country', countryCode: 'UA' }
+  ];
+
+  // При открытии компонента сразу подставляем РФ и Украину
   useEffect(() => {
-    const predefinedTerritories: Territory[] = Object.values(TERRITORY_BOUNDARIES);
-    setTerritories(predefinedTerritories);
-    
-    // Показываем только страны на первом шаге
-    const countries = predefinedTerritories.filter(t => t.type === 'country');
-    setFilteredTerritories(countries);
-  }, []);
+    if (step === 'country') {
+      setTerritories(staticCountries);
+      setFilteredTerritories(staticCountries);
+      setLoading(false);
+      setError(null);
+    }
+  }, [step]);
+
+  // Фильтрация по поисковому запросу только по этим двум странам
+  useEffect(() => {
+    if (step === 'country') {
+      if (!searchValue.trim()) {
+        setFilteredTerritories(staticCountries);
+      } else {
+        const filtered = staticCountries.filter(territory =>
+          territory.name.toLowerCase().includes(searchValue.toLowerCase())
+        );
+        setFilteredTerritories(filtered);
+      }
+    }
+  }, [searchValue, step]);
 
   // Фильтрация территорий при изменении поискового запроса
   useEffect(() => {
@@ -84,24 +106,53 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
   }, [searchValue, territories, step, availableRegions]);
 
   // Обработка выбора страны
-  const handleCountrySelect = (country: Territory | null) => {
-    setSelectedCountry(country);
+  const handleCountrySelect = async (territory: Territory | null) => {
+    setSelectedCountry(territory);
     setSearchValue('');
     
-    if (country) {
-      // Находим все регионы для выбранной страны
-      const regions = territories.filter(t => 
-        t.type === 'state' && t.parent === country.name
-      );
-      setAvailableRegions(regions);
-      
-      if (regions.length > 0) {
-        // Переходим к выбору региона
-        setStep('region');
-        setFilteredTerritories(regions);
-      } else {
-        // Если нет регионов, создаем полигон страны
-        handleFinalSelect(country);
+    if (territory) {
+      setLoading(true);
+      setError(null);
+      try {
+        console.log(`Fetching bounds for territory: ${territory.name}`);
+        const bounds = await getTerritoryBounds(territory.name);
+        console.log('Got territory bounds:', bounds);
+        
+        if (bounds) {
+          let territoryWithCoordinates: Territory;
+          
+          if (bounds.coordinates && bounds.coordinates.length > 0) {
+            console.log(`Found ${bounds.coordinates.length} coordinate sets`);
+            // Если есть точные координаты границ, используем их
+            territoryWithCoordinates = {
+              ...territory,
+              coordinates: bounds.coordinates,
+              bbox: bounds.bbox
+            };
+          } else if (bounds.bbox) {
+            console.log('Using bbox to create rectangular polygon');
+            // Если нет точных координат, но есть bbox, создаем прямоугольный полигон
+            territoryWithCoordinates = {
+              ...territory,
+              coordinates: [createPolygonFromBbox(bounds.bbox)],
+              bbox: bounds.bbox
+            };
+          } else {
+            throw new Error('Координаты территории недоступны');
+          }
+          
+          console.log('Territory with coordinates:', territoryWithCoordinates);
+          setSelectedCountry(territoryWithCoordinates);
+          onTerritorySelect(territoryWithCoordinates);
+          onClose();
+        } else {
+          throw new Error('Координаты территории недоступны');
+        }
+      } catch (err) {
+        console.error('Error fetching territory bounds:', err);
+        setError(err instanceof Error ? err.message : 'Ошибка при получении границ страны');
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -290,29 +341,32 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
                 placeholder={getPlaceholder()}
               />
             )}
-            renderOption={(props, option) => (
-              <Box component="li" {...props}>
-                <Box display="flex" alignItems="center" gap={1} width="100%">
-                  {getTypeIcon(option.type)}
-                  <Box flexGrow={1}>
-                    <Typography variant="body1">
-                      {option.name}
-                    </Typography>
-                    {option.parent && (
-                      <Typography variant="caption" color="text.secondary">
-                        {option.parent}
+            renderOption={(props, option) => {
+              const { key, ...otherProps } = props;
+              return (
+                <Box component="li" key={key} {...otherProps}>
+                  <Box display="flex" alignItems="center" gap={1} width="100%">
+                    {getTypeIcon(option.type)}
+                    <Box flexGrow={1}>
+                      <Typography variant="body1">
+                        {option.name}
                       </Typography>
-                    )}
+                      {option.parent && (
+                        <Typography variant="caption" color="text.secondary">
+                          {option.parent}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Chip
+                      label={getTypeName(option.type)}
+                      size="small"
+                      color={getTypeColor(option.type)}
+                      variant="outlined"
+                    />
                   </Box>
-                  <Chip
-                    label={getTypeName(option.type)}
-                    size="small"
-                    color={getTypeColor(option.type)}
-                    variant="outlined"
-                  />
                 </Box>
-              </Box>
-            )}
+              );
+            }}
             noOptionsText={step === 'country' ? 'Страны не найдены' : 'Области не найдены'}
             loading={loading}
           />

@@ -26,554 +26,254 @@ interface NominatimResult {
   class: string;
   type: string;
   importance: number;
+  geojson?: {
+    type: 'Polygon' | 'MultiPolygon';
+    coordinates: number[][][] | number[][][][];
+  };
 }
 
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  nodes?: number[];
-  geometry?: Array<{lat: number, lon: number}>;
-  tags?: {[key: string]: string};
-}
-
-interface OverpassWay {
-  type: 'way';
-  id: number;
-  nodes: number[];
-  tags?: {[key: string]: string};
-}
-
-interface OverpassNode {
-  type: 'node';
-  id: number;
-  lat: number;
-  lon: number;
-  tags?: {[key: string]: string};
-}
-
-interface OverpassRelation {
-  type: 'relation';
-  id: number;
-  members: Array<{
-    type: 'way' | 'node' | 'relation';
-    ref: number;
-    role: string;
-  }>;
-  tags?: {[key: string]: string};
-}
-
-interface OverpassResponse {
-  version: number;
-  generator: string;
-  elements: (OverpassWay | OverpassNode | OverpassRelation)[];
-}
-
-// Предустановленные границы некоторых территорий
-export const TERRITORY_BOUNDARIES: { [key: string]: TerritoryBounds } = {  // Россия и регионы
-  'Россия': {
-    name: 'Россия',
-    type: 'country',
-    countryCode: 'RU',
-    bbox: [19.6389, 41.1851, 169.0, 81.2504],
-    coordinates: [[
-      // Упрощенные границы России
-      [19.6389, 41.1851], [22.0, 42.0], [28.0, 45.0], [35.0, 46.0], [40.0, 47.0], 
-      [45.0, 46.5], [50.0, 48.0], [55.0, 49.0], [60.0, 50.0], [65.0, 51.0], 
-      [70.0, 52.0], [75.0, 53.0], [80.0, 54.0], [85.0, 55.0], [90.0, 56.0], 
-      [95.0, 57.0], [100.0, 58.0], [105.0, 59.0], [110.0, 60.0], [115.0, 61.0], 
-      [120.0, 62.0], [125.0, 63.0], [130.0, 64.0], [135.0, 65.0], [140.0, 66.0], 
-      [145.0, 67.0], [150.0, 68.0], [155.0, 69.0], [160.0, 70.0], [165.0, 71.0], [169.0, 72.0],
-      // Северное побережье
-      [169.0, 81.2504], [165.0, 81.0], [160.0, 80.5], [155.0, 80.0], [150.0, 79.5], 
-      [145.0, 79.0], [140.0, 78.5], [135.0, 78.0], [130.0, 77.5], [125.0, 77.0], 
-      [120.0, 76.5], [115.0, 76.0], [110.0, 75.5], [105.0, 75.0], [100.0, 74.5], 
-      [95.0, 74.0], [90.0, 73.5], [85.0, 73.0], [80.0, 72.5], [75.0, 72.0], 
-      [70.0, 71.5], [65.0, 71.0], [60.0, 70.5], [55.0, 70.0], [50.0, 69.5], 
-      [45.0, 69.0], [40.0, 68.5], [35.0, 68.0], [30.0, 67.5], [25.0, 67.0], [20.0, 66.5],
-      // Западная граница
-      [19.6389, 66.0], [19.6389, 60.0], [20.0, 55.0], [19.8, 50.0], [19.6389, 41.1851]
-    ]]
-  },
-    // Федеральные субъекты России
-  'Московская область': {
-    name: 'Московская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    stateCode: 'MO',
-    bbox: [35.1967, 54.2421, 40.8747, 56.9371],
-    coordinates: [[
-      [35.1967, 54.2421], [35.8, 54.5], [36.4, 54.8], [37.0, 55.0], [37.6, 55.3], 
-      [38.2, 55.6], [38.8, 55.9], [39.4, 56.2], [40.0, 56.5], [40.4, 56.7], 
-      [40.8747, 56.9371], [40.6, 56.8], [40.2, 56.6], [39.7, 56.4], [39.1, 56.1], 
-      [38.5, 55.8], [37.9, 55.5], [37.3, 55.2], [36.7, 54.9], [36.1, 54.6], 
-      [35.5, 54.4], [35.1967, 54.2421]
-    ]]
-  },
-  'Ленинградская область': {
-    name: 'Ленинградская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [27.2347, 58.0311, 33.7844, 61.5525],
-    coordinates: [[
-      [27.2347, 58.0311], [28.0, 58.3], [28.8, 58.6], [29.6, 58.9], [30.4, 59.2], 
-      [31.2, 59.5], [32.0, 59.8], [32.8, 60.1], [33.4, 60.4], [33.7844, 60.8], 
-      [33.6, 61.1], [33.3, 61.3], [32.9, 61.5525], [32.3, 61.4], [31.7, 61.2], 
-      [31.0, 60.9], [30.3, 60.6], [29.6, 60.3], [28.9, 60.0], [28.2, 59.7], 
-      [27.7, 59.4], [27.4, 59.1], [27.2347, 58.8], [27.2347, 58.0311]
-    ]]
-  },
-  'Ростовская область': {
-    name: 'Ростовская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [39.4269, 45.9183, 44.0419, 50.2408],
-    coordinates: [[
-      [39.4269, 45.9183], [44.0419, 45.9183], [44.0419, 50.2408], [39.4269, 50.2408], [39.4269, 45.9183]
-    ]]
-  },
-  'Краснодарский край': {
-    name: 'Краснодарский край',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [37.3269, 43.4683, 41.8269, 46.8683],
-    coordinates: [[
-      [37.3269, 43.4683], [41.8269, 43.4683], [41.8269, 46.8683], [37.3269, 46.8683], [37.3269, 43.4683]
-    ]]
-  },
-  'Воронежская область': {
-    name: 'Воронежская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [38.1269, 49.5683, 42.9269, 51.9683],
-    coordinates: [[
-      [38.1269, 49.5683], [42.9269, 49.5683], [42.9269, 51.9683], [38.1269, 51.9683], [38.1269, 49.5683]
-    ]]
-  },
-  'Белгородская область': {
-    name: 'Белгородская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [35.2969, 49.9183, 38.9269, 51.1183],
-    coordinates: [[
-      [35.2969, 49.9183], [38.9269, 49.9183], [38.9269, 51.1183], [35.2969, 51.1183], [35.2969, 49.9183]
-    ]]
-  },
-  'Курская область': {
-    name: 'Курская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [34.2969, 50.9183, 38.2969, 52.1183],
-    coordinates: [[
-      [34.2969, 50.9183], [38.2969, 50.9183], [38.2969, 52.1183], [34.2969, 52.1183], [34.2969, 50.9183]
-    ]]
-  },
-  'Брянская область': {
-    name: 'Брянская область',
-    type: 'state',
-    parent: 'Россия',
-    countryCode: 'RU',
-    bbox: [31.8269, 52.0183, 35.2969, 53.4183],
-    coordinates: [[
-      [31.8269, 52.0183], [35.2969, 52.0183], [35.2969, 53.4183], [31.8269, 53.4183], [31.8269, 52.0183]
-    ]]
-  },
-
-  // Города России
-  'Москва': {
-    name: 'Москва',
-    type: 'city',
-    parent: 'Московская область',
-    countryCode: 'RU',
-    bbox: [37.3193, 55.4920, 37.8671, 55.9579],
-    coordinates: [[
-      [37.3193, 55.5574], [37.8671, 55.4920], [37.8671, 55.9579], [37.3193, 55.9579], [37.3193, 55.5574]
-    ]]
-  },
-  'Санкт-Петербург': {
-    name: 'Санкт-Петербург',
-    type: 'city',
-    parent: 'Ленинградская область',
-    countryCode: 'RU',
-    bbox: [29.4354, 59.6939, 30.8177, 60.2578],
-    coordinates: [[
-      [29.4354, 59.6939], [30.8177, 59.6939], [30.8177, 60.2578], [29.4354, 60.2578], [29.4354, 59.6939]
-    ]]
-  },
-  // Украина и области
-  'Украина': {
-    name: 'Украина',
-    type: 'country',
-    countryCode: 'UA',
-    bbox: [22.1371, 44.3614, 40.2275, 52.3797],
-    coordinates: [[
-      // Упрощенные границы Украины
-      [22.1371, 45.4], [22.5, 46.0], [23.0, 47.0], [23.5, 47.8], [24.0, 48.2], 
-      [24.5, 48.5], [25.0, 48.8], [25.5, 49.0], [26.0, 49.3], [26.5, 49.5], 
-      [27.0, 49.7], [27.5, 50.0], [28.0, 50.2], [28.5, 50.5], [29.0, 50.8], 
-      [29.5, 51.0], [30.0, 51.2], [30.5, 51.5], [31.0, 51.7], [31.5, 52.0], 
-      [32.0, 52.2], [32.5, 52.3], [33.0, 52.3797], [33.5, 52.3], [34.0, 52.2], 
-      [34.5, 52.0], [35.0, 51.8], [35.5, 51.5], [36.0, 51.2], [36.5, 51.0], 
-      [37.0, 50.7], [37.5, 50.4], [38.0, 50.0], [38.5, 49.6], [39.0, 49.2], 
-      [39.5, 48.8], [40.0, 48.4], [40.2275, 48.0],
-      // Восточная граница
-      [40.2275, 47.5], [40.0, 47.0], [39.8, 46.5], [39.5, 46.0], [39.2, 45.5], 
-      [38.8, 45.2], [38.4, 44.9], [38.0, 44.7], [37.5, 44.5], [37.0, 44.4], 
-      [36.5, 44.3614], [36.0, 44.4], [35.5, 44.5], [35.0, 44.6], [34.5, 44.8], 
-      [34.0, 45.0], [33.5, 45.2], [33.0, 45.4], [32.5, 45.6], [32.0, 45.8], 
-      [31.5, 46.0], [31.0, 46.2], [30.5, 46.4], [30.0, 46.6], [29.5, 46.8], 
-      [29.0, 47.0], [28.5, 47.2], [28.0, 47.4], [27.5, 47.6], [27.0, 47.8], 
-      [26.5, 47.9], [26.0, 47.8], [25.5, 47.6], [25.0, 47.4], [24.5, 47.2], 
-      [24.0, 46.8], [23.5, 46.4], [23.0, 46.0], [22.5, 45.7], [22.1371, 45.4]
-    ]]
-  },
-  // Области Украины
-  'Киевская область': {
-    name: 'Киевская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [29.2371, 49.5614, 31.9371, 51.2614],
-    coordinates: [[
-      [29.2371, 49.5614], [29.8, 49.7], [30.4, 49.8], [31.0, 50.0], [31.5, 50.3], 
-      [31.9371, 50.6], [31.8, 50.9], [31.6, 51.1], [31.2, 51.2614], [30.8, 51.2], 
-      [30.4, 51.0], [30.0, 50.8], [29.6, 50.5], [29.4, 50.2], [29.2371, 49.9], 
-      [29.2371, 49.5614]
-    ]]
-  },
-  'Харьковская область': {
-    name: 'Харьковская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [35.7371, 49.0614, 38.0371, 50.6614],
-    coordinates: [[
-      [35.7371, 49.0614], [36.2, 49.2], [36.8, 49.4], [37.3, 49.6], [37.7, 49.9], 
-      [38.0371, 50.2], [37.9, 50.4], [37.7, 50.6614], [37.3, 50.5], [36.8, 50.3], 
-      [36.3, 50.1], [35.9, 49.8], [35.7371, 49.5], [35.7371, 49.0614]
-    ]]
-  },
-  'Львовская область': {
-    name: 'Львовская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [22.7371, 49.0614, 25.2371, 50.4614],
-    coordinates: [[
-      [22.7371, 49.0614], [23.2, 49.2], [23.7, 49.4], [24.2, 49.6], [24.7, 49.8], 
-      [25.2371, 50.0], [25.1, 50.2], [24.9, 50.4614], [24.4, 50.3], [23.9, 50.1], 
-      [23.4, 49.9], [22.9, 49.7], [22.7371, 49.5], [22.7371, 49.0614]
-    ]]
-  },
-  'Одесская область': {
-    name: 'Одесская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [27.8371, 45.3614, 30.8371, 47.8614],
-    coordinates: [[
-      [27.8371, 45.3614], [30.8371, 45.3614], [30.8371, 47.8614], [27.8371, 47.8614], [27.8371, 45.3614]
-    ]]
-  },
-  'Днепропетровская область': {
-    name: 'Днепропетровская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [33.4371, 47.7614, 36.4371, 49.2614],
-    coordinates: [[
-      [33.4371, 47.7614], [36.4371, 47.7614], [36.4371, 49.2614], [33.4371, 49.2614], [33.4371, 47.7614]
-    ]]
-  },
-  'Донецкая область': {
-    name: 'Донецкая область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [36.2371, 46.9614, 38.8371, 49.1614],
-    coordinates: [[
-      [36.2371, 46.9614], [38.8371, 46.9614], [38.8371, 49.1614], [36.2371, 49.1614], [36.2371, 46.9614]
-    ]]
-  },
-  'Луганская область': {
-    name: 'Луганская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [37.9371, 48.1614, 40.2371, 49.9614],
-    coordinates: [[
-      [37.9371, 48.1614], [40.2371, 48.1614], [40.2371, 49.9614], [37.9371, 49.9614], [37.9371, 48.1614]
-    ]]
-  },
-  'Запорожская область': {
-    name: 'Запорожская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [34.2371, 46.2614, 36.9371, 48.5614],
-    coordinates: [[
-      [34.2371, 46.2614], [36.9371, 46.2614], [36.9371, 48.5614], [34.2371, 48.5614], [34.2371, 46.2614]
-    ]]
-  },
-  'Херсонская область': {
-    name: 'Херсонская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [32.2371, 45.9614, 34.9371, 47.2614],
-    coordinates: [[
-      [32.2371, 45.9614], [34.9371, 45.9614], [34.9371, 47.2614], [32.2371, 47.2614], [32.2371, 45.9614]
-    ]]
-  },
-  'Полтавская область': {
-    name: 'Полтавская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [31.9371, 49.0614, 34.8371, 50.7614],
-    coordinates: [[
-      [31.9371, 49.0614], [34.8371, 49.0614], [34.8371, 50.7614], [31.9371, 50.7614], [31.9371, 49.0614]
-    ]]
-  },
-  'Сумская область': {
-    name: 'Сумская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [32.4371, 50.2614, 35.2371, 52.0614],
-    coordinates: [[
-      [32.4371, 50.2614], [35.2371, 50.2614], [35.2371, 52.0614], [32.4371, 52.0614], [32.4371, 50.2614]
-    ]]
-  },
-  'Черниговская область': {
-    name: 'Черниговская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [30.7371, 51.0614, 33.2371, 52.3614],
-    coordinates: [[
-      [30.7371, 51.0614], [33.2371, 51.0614], [33.2371, 52.3614], [30.7371, 52.3614], [30.7371, 51.0614]
-    ]]
-  },
-  'Житомирская область': {
-    name: 'Житомирская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [27.6371, 50.1614, 29.9371, 51.8614],
-    coordinates: [[
-      [27.6371, 50.1614], [29.9371, 50.1614], [29.9371, 51.8614], [27.6371, 51.8614], [27.6371, 50.1614]
-    ]]
-  },
-  'Винницкая область': {
-    name: 'Винницкая область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [27.6371, 48.6614, 30.1371, 50.2614],
-    coordinates: [[
-      [27.6371, 48.6614], [30.1371, 48.6614], [30.1371, 50.2614], [27.6371, 50.2614], [27.6371, 48.6614]
-    ]]
-  },
-  'Черкасская область': {
-    name: 'Черкасская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [30.9371, 48.7614, 32.9371, 50.1614],
-    coordinates: [[
-      [30.9371, 48.7614], [32.9371, 48.7614], [32.9371, 50.1614], [30.9371, 50.1614], [30.9371, 48.7614]
-    ]]
-  },
-  'Кировоградская область': {
-    name: 'Кировоградская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [31.2371, 47.4614, 33.7371, 49.4614],
-    coordinates: [[
-      [31.2371, 47.4614], [33.7371, 47.4614], [33.7371, 49.4614], [31.2371, 49.4614], [31.2371, 47.4614]
-    ]]
-  },
-  'Николаевская область': {
-    name: 'Николаевская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [30.9371, 46.2614, 33.2371, 47.9614],
-    coordinates: [[
-      [30.9371, 46.2614], [33.2371, 46.2614], [33.2371, 47.9614], [30.9371, 47.9614], [30.9371, 46.2614]
-    ]]
-  },
-  'Хмельницкая область': {
-    name: 'Хмельницкая область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [25.1371, 48.9614, 27.9371, 50.6614],
-    coordinates: [[
-      [25.1371, 48.9614], [27.9371, 48.9614], [27.9371, 50.6614], [25.1371, 50.6614], [25.1371, 48.9614]
-    ]]
-  },
-  'Тернопольская область': {
-    name: 'Тернопольская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [24.8371, 48.8614, 26.6371, 50.0614],
-    coordinates: [[
-      [24.8371, 48.8614], [26.6371, 48.8614], [26.6371, 50.0614], [24.8371, 50.0614], [24.8371, 48.8614]
-    ]]
-  },
-  'Ровенская область': {
-    name: 'Ровенская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [24.6371, 50.3614, 27.1371, 51.7614],
-    coordinates: [[
-      [24.6371, 50.3614], [27.1371, 50.3614], [27.1371, 51.7614], [24.6371, 51.7614], [24.6371, 50.3614]
-    ]]
-  },
-  'Волынская область': {
-    name: 'Волынская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [22.8371, 50.7614, 25.2371, 52.0614],
-    coordinates: [[
-      [22.8371, 50.7614], [25.2371, 50.7614], [25.2371, 52.0614], [22.8371, 52.0614], [22.8371, 50.7614]
-    ]]
-  },
-  'Ивано-Франковская область': {
-    name: 'Ивано-Франковская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [23.5371, 48.0614, 25.9371, 49.3614],
-    coordinates: [[
-      [23.5371, 48.0614], [25.9371, 48.0614], [25.9371, 49.3614], [23.5371, 49.3614], [23.5371, 48.0614]
-    ]]
-  },
-  'Закарпатская область': {
-    name: 'Закарпатская область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [22.1371, 47.8614, 24.6371, 48.9614],
-    coordinates: [[
-      [22.1371, 47.8614], [24.6371, 47.8614], [24.6371, 48.9614], [22.1371, 48.9614], [22.1371, 47.8614]
-    ]]
-  },
-  'Черновицкая область': {
-    name: 'Черновицкая область',
-    type: 'state',
-    parent: 'Украина',
-    countryCode: 'UA',
-    bbox: [25.7371, 47.7614, 26.8371, 48.6614],
-    coordinates: [[
-      [25.7371, 47.7614], [26.8371, 47.7614], [26.8371, 48.6614], [25.7371, 48.6614], [25.7371, 47.7614]
-    ]]
-  },
-
-  // Города Украины
-  'Киев': {
-    name: 'Киев',
-    type: 'city',
-    parent: 'Киевская область',
-    countryCode: 'UA',
-    bbox: [30.2371, 50.2614, 30.8371, 50.6614],
-    coordinates: [[
-      [30.2371, 50.2614], [30.8371, 50.2614], [30.8371, 50.6614], [30.2371, 50.6614], [30.2371, 50.2614]
-    ]]
-  },
-  'Харьков': {
-    name: 'Харьков',
-    type: 'city',
-    parent: 'Харьковская область',
-    countryCode: 'UA',
-    bbox: [36.1371, 49.8614, 36.4371, 50.1614],
-    coordinates: [[
-      [36.1371, 49.8614], [36.4371, 49.8614], [36.4371, 50.1614], [36.1371, 50.1614], [36.1371, 49.8614]
-    ]]
-  },
-  'Одесса': {
-    name: 'Одесса',
-    type: 'city',
-    parent: 'Одесская область',
-    countryCode: 'UA',
-    bbox: [30.6371, 46.3614, 30.9371, 46.6614],
-    coordinates: [[
-      [30.6371, 46.3614], [30.9371, 46.3614], [30.9371, 46.6614], [30.6371, 46.6614], [30.6371, 46.3614]
-    ]]
-  },
-  'Днепр': {
-    name: 'Днепр',
-    type: 'city',
-    parent: 'Днепропетровская область',
-    countryCode: 'UA',
-    bbox: [34.8371, 48.3614, 35.2371, 48.6614],
-    coordinates: [[
-      [34.8371, 48.3614], [35.2371, 48.3614], [35.2371, 48.6614], [34.8371, 48.6614], [34.8371, 48.3614]
-    ]]
-  },
-  'Львов': {
-    name: 'Львов',
-    type: 'city',
-    parent: 'Львовская область',
-    countryCode: 'UA',
-    bbox: [23.9371, 49.7614, 24.2371, 49.9614],
-    coordinates: [[
-      [23.9371, 49.7614], [24.2371, 49.7614], [24.2371, 49.9614], [23.9371, 49.9614], [23.9371, 49.7614]
-    ]]
-  },
-
-  // Другие страны
-  'Германия': {
-    name: 'Германия',
-    type: 'country',
-    countryCode: 'DE',
-    bbox: [5.8663, 47.2701, 15.0419, 55.0815],
-    coordinates: [[
-      [5.8663, 47.2701], [15.0419, 47.2701], [15.0419, 55.0815], [5.8663, 55.0815], [5.8663, 47.2701]
-    ]]
-  },
-  'Берлин': {
-    name: 'Берлин',
-    type: 'city',
-    parent: 'Германия',
-    countryCode: 'DE',
-    bbox: [13.0882, 52.3382, 13.7606, 52.6755],
-    coordinates: [[
-      [13.0882, 52.3382], [13.7606, 52.3382], [13.7606, 52.6755], [13.0882, 52.6755], [13.0882, 52.3382]
-    ]]
+// Функция для приведения координат к формату [долгота, широта]
+function ensureLonLat(coords: any): any {
+  // Если это точка
+  if (Array.isArray(coords) && coords.length === 2 && 
+      typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+    const [first, second] = coords;
+    
+    // Проверка на вероятную долготу (longitude) в первой координате
+    // Долгота должна быть в диапазоне [-180, 180]
+    // Широта должна быть в диапазоне [-90, 90]
+    const isFirstLongitude = Math.abs(first) <= 180;
+    const isSecondLatitude = Math.abs(second) <= 90;
+    
+    if (isFirstLongitude && isSecondLatitude) {
+      // Уже в правильном формате [lon, lat]
+      return coords;
+    } else if (Math.abs(second) <= 180 && Math.abs(first) <= 90) {
+      // Вероятно координаты перепутаны местами, возвращаем [lon, lat]
+      return [second, first];
+    } else {
+      // Если координаты за пределами допустимых значений,
+      // пробуем определить порядок по относительной величине
+      if (Math.abs(first) > Math.abs(second)) {
+        return [first, second]; // Большее значение вероятно долгота
+      } else {
+        return [second, first];
+      }
+    }
   }
-};
+  
+  // Если это массив массивов (полигон или мультиполигон)
+  if (Array.isArray(coords)) {
+    return coords.map(c => ensureLonLat(c));
+  }
+  
+  return coords;
+}
 
-// Функция для получения границ территории
+// Получение границ территории через Overpass API
+async function fetchTerritoryGeoJson(territoryName: string): Promise<TerritoryBounds | null> {
+  console.log(`Fetching GeoJSON for: "${territoryName}"`);
+  
+  // 1. Получаем OSM id через Nominatim
+  const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&q=${encodeURIComponent(territoryName)}`;
+  const nominatimResp = await fetch(nominatimUrl, { headers: { 'Accept-Language': 'ru' } });
+  const nominatimData: NominatimResult[] = await nominatimResp.json();
+  
+  console.log('Nominatim response:', nominatimData);
+  
+  // Ищем именно страну (type === 'country' или place === 'country' или type === 'administrative')
+  let place = nominatimData.find(p => p.type === 'country' || 
+                                      p.type === 'administrative' && p.class === 'boundary');
+  
+  // Специальная обработка для России и Украины
+  if (!place) {
+    if (territoryName === 'Россия' || territoryName.toLowerCase() === 'russia') {
+      console.log('Trying direct English search for Russia');
+      const nominatimRespEn = await fetch('https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&q=Russia', 
+        { headers: { 'Accept-Language': 'en' } });
+      const nominatimDataEn: NominatimResult[] = await nominatimRespEn.json();
+      console.log('English Nominatim response for Russia:', nominatimDataEn);
+      // Ищем по более широким критериям
+      place = nominatimDataEn.find(p => p.type === 'administrative' && p.class === 'boundary');
+    } else if (territoryName === 'Украина' || territoryName.toLowerCase() === 'ukraine') {
+      console.log('Trying direct English search for Ukraine');
+      const nominatimRespEn = await fetch('https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&q=Ukraine', 
+        { headers: { 'Accept-Language': 'en' } });
+      const nominatimDataEn: NominatimResult[] = await nominatimRespEn.json();
+      console.log('English Nominatim response for Ukraine:', nominatimDataEn);
+      // Ищем по более широким критериям
+      place = nominatimDataEn.find(p => p.type === 'administrative' && p.class === 'boundary');
+    }
+  }
+  
+  if (!place) {
+    console.log('No place found for:', territoryName);
+    return null;
+  }
+
+  console.log('Found place:', place);
+  
+  const osmType = place.osm_type.toLowerCase();
+  const osmId = place.osm_id;
+
+  // 2. Получаем данные границ
+  let coordinates: number[][][] = [];
+  let bbox: [number, number, number, number] = [
+    parseFloat(place.boundingbox[2]), // minLon
+    parseFloat(place.boundingbox[0]), // minLat
+    parseFloat(place.boundingbox[3]), // maxLon
+    parseFloat(place.boundingbox[1])  // maxLat
+  ];
+
+  console.log('Parsed bbox:', bbox);
+
+  // Сначала пробуем получить координаты из GeoJSON
+  if (place.geojson) {
+    console.log('GeoJSON type:', place.geojson.type);
+    
+    if (place.geojson.type === 'Polygon') {
+      console.log('Processing Polygon geometry');
+      coordinates = ensureLonLat(place.geojson.coordinates) as number[][][];
+    } else if (place.geojson.type === 'MultiPolygon') {
+      console.log('Processing MultiPolygon geometry');
+      // Fix for MultiPolygon handling - we need to properly format the coordinates
+      try {
+        const multiPolygon = place.geojson.coordinates as number[][][];
+        
+        // In case of MultiPolygon, we take all polygons
+        // Each polygon is an array with the first element being the outer ring
+        // and subsequent elements being inner rings (holes)
+        coordinates = [];
+        
+        multiPolygon.forEach(polygon => {
+          // Take only the outer ring of each polygon (element 0)
+          if (polygon && polygon.length > 0) {
+            const processedPolygon = ensureLonLat(polygon[0]) as number[][];
+            if (processedPolygon && processedPolygon.length > 0) {
+              coordinates.push(processedPolygon);
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Error processing MultiPolygon:', err);
+      }
+    }
+    console.log('Processed coordinates length:', coordinates.length);
+  }
+
+  // Если координат все еще нет, используем Overpass API как запасной вариант
+  if (!coordinates.length) {
+    console.log('No coordinates from GeoJSON, trying Overpass API');
+    let overpassType = '';
+    if (osmType === 'relation') overpassType = 'relation';
+    else if (osmType === 'way') overpassType = 'way';
+    else if (osmType === 'node') overpassType = 'node';
+    else return null;
+
+    const overpassQuery = `[out:json];${overpassType}(${osmId});out body;>;out skel qt;`;
+    const overpassUrl = 'https://overpass-api.de/api/interpreter';
+    console.log('Overpass query:', overpassQuery);
+    
+    const overpassResp = await fetch(overpassUrl, {
+      method: 'POST',
+      body: overpassQuery,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    
+    const overpassData = await overpassResp.json();
+    console.log('Overpass response elements:', overpassData.elements?.length);
+    
+    if (overpassData.elements) {
+      const rel = overpassData.elements.find((el: any) => el.type === overpassType && el.id == osmId);
+      if (rel && rel.geometry) {
+        coordinates = [[rel.geometry.map((p: any) => [p.lon, p.lat])]];
+        console.log('Got coordinates from Overpass geometry');
+      }
+    }
+  }
+
+  // Если координат все еще нет, но есть bbox, создаем простой прямоугольник
+  if ((!coordinates || coordinates.length === 0) && bbox) {
+    console.log('Using bbox to create a simple polygon');
+    // Корректное создание полигона из bbox
+    const polygonFromBbox = createPolygonFromBbox(bbox);
+    coordinates = [polygonFromBbox];
+  }
+
+  if (!coordinates || coordinates.length === 0) {
+    console.log('No coordinates found at all');
+    return null;
+  }
+
+  let territoryType: 'country' | 'state' | 'city';
+  
+  // Определение типа территории
+  if (place.type === 'country' || (place.type === 'administrative' && place.class === 'boundary')) {
+    territoryType = 'country';
+  } else if (place.type === 'state') {
+    territoryType = 'state';
+  } else {
+    territoryType = 'city';
+  }
+
+  const result: TerritoryBounds = {
+    name: place.display_name.split(',')[0],
+    type: territoryType,
+    coordinates,
+    bbox,
+    osmId: String(osmId),
+    osmType: osmType as 'relation' | 'way' | 'node',
+    countryCode: place.class === 'boundary' ? undefined : place.class,
+    parent: undefined
+  };
+
+  console.log('Returning result:', result);
+  return result;
+}
+
+// Получить границы территории (только динамически через OSM)
 export const getTerritoryBounds = async (territoryName: string): Promise<TerritoryBounds | null> => {
-  // В реальном приложении здесь может быть запрос к API
-  return TERRITORY_BOUNDARIES[territoryName] || null;
+  return await fetchTerritoryGeoJson(territoryName);
 };
 
-// Функция для поиска территорий
+// Поиск территорий (поиск только через Nominatim)
 export const searchTerritories = async (query: string): Promise<TerritoryBounds[]> => {
-  const normalizedQuery = query.toLowerCase();
-  return Object.values(TERRITORY_BOUNDARIES).filter(territory =>
-    territory.name.toLowerCase().includes(normalizedQuery) ||
-    territory.parent?.toLowerCase().includes(normalizedQuery)
-  );
+  const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&q=${encodeURIComponent(query)}`;
+  const nominatimResp = await fetch(nominatimUrl, { headers: { 'Accept-Language': 'ru' } });
+  const nominatimData: NominatimResult[] = await nominatimResp.json();
+  const results: TerritoryBounds[] = [];
+  for (const place of nominatimData) {
+    let coordinates: number[][][] = [];
+    let bbox: [number, number, number, number] = [
+      parseFloat(place.boundingbox[2]),
+      parseFloat(place.boundingbox[0]),
+      parseFloat(place.boundingbox[3]),
+      parseFloat(place.boundingbox[1])
+    ];
+    if (place.geojson && place.geojson.type === 'Polygon') {
+      coordinates = ensureLonLat(place.geojson.coordinates) as number[][][];
+    } else if (place.geojson && place.geojson.type === 'MultiPolygon') {
+      coordinates = (place.geojson.coordinates as number[][][][])
+        .map(poly => ensureLonLat(poly))
+        .flat(1) as number[][][];
+    }
+    if (coordinates.length) {
+      results.push({
+        name: place.display_name.split(',')[0],
+        type: place.type === 'country' ? 'country' : (place.type === 'state' ? 'state' : 'city'),
+        coordinates,
+        bbox,
+        osmId: String(place.osm_id),
+        osmType: place.osm_type.toLowerCase() as 'relation' | 'way' | 'node',
+        countryCode: place.class === 'boundary' ? undefined : place.class,
+        parent: undefined
+      });
+    }
+  }
+  return results;
 };
 
-// Функция для создания простого прямоугольного полигона из bbox
+// Функция для создания простого прямоугольного полигона из bbox (оставлена для совместимости)
 export const createPolygonFromBbox = (bbox: [number, number, number, number]): number[][] => {
   const [minLon, minLat, maxLon, maxLat] = bbox;
   return [
