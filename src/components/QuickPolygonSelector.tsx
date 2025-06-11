@@ -104,34 +104,64 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
       }
     }
   }, [searchValue, territories, step, availableRegions]);
+  // Загрузка регионов для выбранной страны
+  const loadRegions = async (countryCode: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Здесь можно реализовать загрузку регионов по коду страны
+      // Для демонстрации используем заглушку
+      console.log(`Loading regions for country code: ${countryCode}`);
+      
+      // Симуляция загрузки регионов (можно заменить на реальный API-запрос)
+      let regionsData: Territory[] = [];
+      
+      if (countryCode === 'RU') {
+        regionsData = [
+          { name: 'Москва', type: 'state', parent: 'Россия', countryCode: 'RU', stateCode: 'MOW' },
+          { name: 'Санкт-Петербург', type: 'state', parent: 'Россия', countryCode: 'RU', stateCode: 'SPE' },
+          { name: 'Краснодарский край', type: 'state', parent: 'Россия', countryCode: 'RU', stateCode: 'KDA' },
+          { name: 'Московская область', type: 'state', parent: 'Россия', countryCode: 'RU', stateCode: 'MOS' }
+        ];
+      } else if (countryCode === 'UA') {
+        regionsData = [
+          { name: 'Киев', type: 'state', parent: 'Украина', countryCode: 'UA', stateCode: 'KYV' },
+          { name: 'Харьковская область', type: 'state', parent: 'Украина', countryCode: 'UA', stateCode: 'KHA' },
+          { name: 'Одесская область', type: 'state', parent: 'Украина', countryCode: 'UA', stateCode: 'ODE' }
+        ];
+      }
+      
+      setAvailableRegions(regionsData);
+      setFilteredTerritories(regionsData);
+    } catch (err) {
+      console.error('Error loading regions:', err);
+      setError(err instanceof Error ? err.message : 'Ошибка при загрузке регионов');
+      setAvailableRegions([]);
+      setFilteredTerritories([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Обработка выбора страны
   const handleCountrySelect = async (territory: Territory | null) => {
     setSelectedCountry(territory);
     setSearchValue('');
-    
     if (territory) {
       setLoading(true);
       setError(null);
       try {
-        console.log(`Fetching bounds for territory: ${territory.name}`);
         const bounds = await getTerritoryBounds(territory.name);
-        console.log('Got territory bounds:', bounds);
-        
         if (bounds) {
           let territoryWithCoordinates: Territory;
-          
           if (bounds.coordinates && bounds.coordinates.length > 0) {
-            console.log(`Found ${bounds.coordinates.length} coordinate sets`);
-            // Если есть точные координаты границ, используем их
             territoryWithCoordinates = {
               ...territory,
               coordinates: bounds.coordinates,
               bbox: bounds.bbox
             };
           } else if (bounds.bbox) {
-            console.log('Using bbox to create rectangular polygon');
-            // Если нет точных координат, но есть bbox, создаем прямоугольный полигон
             territoryWithCoordinates = {
               ...territory,
               coordinates: [createPolygonFromBbox(bounds.bbox)],
@@ -140,16 +170,12 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
           } else {
             throw new Error('Координаты территории недоступны');
           }
-          
-          console.log('Territory with coordinates:', territoryWithCoordinates);
           setSelectedCountry(territoryWithCoordinates);
-          onTerritorySelect(territoryWithCoordinates);
-          onClose();
+          // Не переходим к областям автоматически!
         } else {
           throw new Error('Координаты территории недоступны');
         }
       } catch (err) {
-        console.error('Error fetching territory bounds:', err);
         setError(err instanceof Error ? err.message : 'Ошибка при получении границ страны');
       } finally {
         setLoading(false);
@@ -157,9 +183,68 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
     }
   };
 
+  // Кнопка для перехода к выбору областей
+  const handleGoToRegions = async () => {
+    if (!selectedCountry) return;
+    setStep('region');
+    if (selectedCountry.countryCode) {
+      await loadRegions(selectedCountry.countryCode);
+    } else {
+      setAvailableRegions([]);
+    }
+  };
+
   // Обработка выбора региона
-  const handleRegionSelect = (region: Territory | null) => {
-    setSelectedRegion(region);
+  const handleRegionSelect = async (region: Territory | null) => {
+    if (!region) {
+      setSelectedRegion(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log(`Fetching bounds for region: ${region.name}`);
+      const bounds = await getTerritoryBounds(region.name);
+      console.log('Got region bounds:', bounds);
+      
+      if (bounds) {
+        let regionWithCoordinates: Territory;
+        
+        if (bounds.coordinates && bounds.coordinates.length > 0) {
+          console.log(`Found ${bounds.coordinates.length} coordinate sets for region`);
+          // Если есть точные координаты границ, используем их
+          regionWithCoordinates = {
+            ...region,
+            coordinates: bounds.coordinates,
+            bbox: bounds.bbox
+          };
+        } else if (bounds.bbox) {
+          console.log('Using bbox to create rectangular polygon for region');
+          // Если нет точных координат, но есть bbox, создаем прямоугольный полигон
+          regionWithCoordinates = {
+            ...region,
+            coordinates: [createPolygonFromBbox(bounds.bbox)],
+            bbox: bounds.bbox
+          };
+        } else {
+          throw new Error('Координаты региона недоступны');
+        }
+        
+        console.log('Region with coordinates:', regionWithCoordinates);
+        setSelectedRegion(regionWithCoordinates);
+      } else {
+        throw new Error('Координаты региона недоступны');
+      }
+    } catch (err) {
+      console.error('Error fetching region bounds:', err);
+      setError(err instanceof Error ? err.message : 'Ошибка при получении границ региона');
+      // Всё равно сохраняем выбранный регион, даже без координат
+      setSelectedRegion(region);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Обработка возврата к выбору страны
@@ -339,6 +424,20 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
                 variant="outlined"
                 fullWidth
                 placeholder={getPlaceholder()}
+                sx={{
+                  '& .MuiInputBase-root': {
+                    color: theme.palette.text.primary,
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: theme.palette.text.primary,
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.divider,
+                  },
+                }}
+                InputProps={{
+                  ...params.InputProps
+                }}
               />
             )}
             renderOption={(props, option) => {
@@ -385,7 +484,7 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
         )}
 
         {getCurrentSelection() && (
-          <Box sx={{ p: 2, bgcolor: theme.palette.action.hover, borderRadius: 1 }}>
+          <Box sx={{ p: 2, bgcolor: theme.palette.background.default, color: theme.palette.text.primary, borderRadius: 1 }}>
             <Typography variant="subtitle2" gutterBottom>
               Выбранная территория:
             </Typography>
@@ -404,10 +503,22 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
               <Typography variant="body2" color="text.secondary">
                 Входит в: {getCurrentSelection()!.parent}
               </Typography>
-            )}            {getCurrentSelection()!.bbox && (
+            )}
+            {getCurrentSelection()!.bbox && (
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                 Координаты: {getCurrentSelection()!.bbox!.map((coord: number) => coord.toFixed(4)).join(', ')}
               </Typography>
+            )}
+            {/* Кнопка перехода к выбору областей внутри блока выбранной территории */}
+            {step === 'country' && selectedCountry && (
+              <Button
+                onClick={handleGoToRegions}
+                disabled={loading}
+                variant="outlined"
+                sx={{ mt: 2, color: theme.palette.primary.main, borderColor: theme.palette.primary.main }}
+              >
+                Выбрать область
+              </Button>
             )}
           </Box>
         )}
@@ -423,17 +534,6 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
         <Button onClick={handleClose} disabled={loading}>
           Отмена
         </Button>
-        
-        {/* Кнопка для создания полигона страны, когда есть области */}
-        {step === 'region' && availableRegions.length > 0 && (
-          <Button
-            onClick={() => selectedCountry && handleFinalSelect(selectedCountry)}
-            disabled={!selectedCountry || loading}
-            variant="outlined"
-          >
-            Создать полигон страны
-          </Button>
-        )}
         
         {/* Кнопка продолжения/создания */}
         <Button
