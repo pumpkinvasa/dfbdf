@@ -273,10 +273,15 @@ const HomePage: React.FC = () => {
       mapRef.current.navigateToPolygon(polygonIndex);
     }
   }, []);
-
   const handlePolygonZoom = useCallback((polygonIndex: number) => {
     if (mapRef.current && mapRef.current.navigateToPolygon) {
       mapRef.current.navigateToPolygon(polygonIndex);
+    }
+  }, []);
+
+  const handlePolygonPartZoom = useCallback((polygonIndex: number, partIndex: number) => {
+    if (mapRef.current && mapRef.current.navigateToPolygonPart) {
+      mapRef.current.navigateToPolygonPart(polygonIndex, partIndex);
     }
   }, []);
 
@@ -1040,7 +1045,7 @@ const HomePage: React.FC = () => {
           onFileUpload={handleFileUpload}
           currentComposite={currentComposite}
           currentSatellite={currentSatellite}
-        />          <DashboardMenu
+        />        <DashboardMenu
           open={dashboardMenuOpen}
           onClose={handleDashboardMenuClose}
           aoiPolygons={aoiPolygons}
@@ -1052,6 +1057,7 @@ const HomePage: React.FC = () => {
           hoveredPolygonIndex={hoveredPolygonIndex}
           onPolygonZoom={handlePolygonZoom}
           onTerritoryPolygonAdd={handleTerritoryPolygonAdd}
+          onPolygonPartZoom={handlePolygonPartZoom}
         />
         
         <SearchMenu

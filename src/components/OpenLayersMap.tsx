@@ -15,6 +15,7 @@ import ImageLayer from 'ol/layer/Image';
 import Static from 'ol/source/ImageStatic';
 import { Draw, Modify, Snap } from 'ol/interaction';
 import Polygon from 'ol/geom/Polygon';
+import MultiPolygon from 'ol/geom/MultiPolygon';
 import Point from 'ol/geom/Point';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text } from 'ol/style';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -22,6 +23,7 @@ import { getArea } from 'ol/sphere';
 import { Overlay } from 'ol';
 import Feature from 'ol/Feature';
 import { Coordinate } from 'ol/coordinate';
+import simplify from '@turf/simplify';
 
 // Тип для ref
 export interface OpenLayersMapHandle {
@@ -40,6 +42,7 @@ export interface OpenLayersMapHandle {
   removePolygonByIndex: (index: number) => void;
   setPolygonVisibilityByIndex: (index: number, visible: boolean) => void;  setPolygonHoverByIndex: (index: number, hovered: boolean) => void; // Новая функция для установки наведения
   addGeoJSONFeature: (geoJSON: any) => void; // Добавить GeoJSON фичу на карту
+  navigateToPolygonPart: (polygonIndex: number, partIndex: number) => void; // Навигация к части MultiPolygon
 }
 
 interface OpenLayersMapProps {
@@ -166,7 +169,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
       const lastFeature = features[features.length - 1];
       const geometry = lastFeature.getGeometry();
 
-      if (!geometry || !(geometry instanceof Polygon)) return null;
+      if (!geometry || !(geometry instanceof Polygon || geometry instanceof MultiPolygon)) return null;
 
       // Calculate the center of the polygon extent
       const extent = geometry.getExtent();
@@ -396,9 +399,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
   const createVectorStyle = () => {
     return (feature: any) => {
       const styles: Style[] = [];
-      const geometry = feature.getGeometry();
-
-      if (geometry instanceof Polygon) {
+      const geometry = feature.getGeometry();      if (geometry instanceof Polygon) {
         // Основной стиль для фигуры (без заливки, только грани)
         styles.push(
           new Style({
@@ -462,6 +463,64 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             }),
           })
         );
+      } else if (geometry instanceof MultiPolygon) {
+        // Основной стиль для мультиполигона
+        styles.push(
+          new Style({
+            stroke: new Stroke({
+              color: '#00b3b3',
+              width: 2,
+            }),
+          })
+        );
+
+        // Вычисляем общую площадь всех полигонов
+        const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
+        const areaKm2 = (areaM2 / 1_000_000).toFixed(2);
+
+        // Добавляем точки на углах для каждого полигона в мультиполигоне
+        const polygons = geometry.getPolygons();
+        polygons.forEach(polygon => {
+          const coordinates = polygon.getCoordinates()[0] as Coordinate[];
+          coordinates.slice(0, -1).forEach((coord: Coordinate) => {
+            styles.push(
+              new Style({
+                geometry: new Point(coord),
+                image: new CircleStyle({
+                  radius: 4,
+                  fill: new Fill({
+                    color: '#ffffff',
+                  }),
+                  stroke: new Stroke({
+                    color: '#00b3b3',
+                    width: 2,
+                  }),
+                }),
+              })
+            );
+          });
+        });
+
+        // Для метки с площадью используем центр экстента всего мультиполигона
+        const extent = geometry.getExtent();
+        const centerX = (extent[0] + extent[2]) / 2;
+        const centerY = (extent[1] + extent[3]) / 2;
+        
+        styles.push(
+          new Style({
+            geometry: new Point([centerX, centerY]),
+            text: new Text({
+              text: `${areaKm2} км² (${polygons.length} ${polygons.length === 1 ? 'часть' : 'частей'})`,
+              font: '12px Arial',
+              fill: new Fill({ color: '#ffffff' }),
+              backgroundFill: new Fill({ color: '#000000' }),
+              padding: [2, 2, 2, 2],
+              offsetY: -15,
+              textAlign: 'center',
+              overflow: true,
+            }),
+          })
+        );
       }
 
       return styles;
@@ -472,8 +531,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
   const createHoverStyle = () => {
     return (feature: any) => {
       const styles: Style[] = [];
-      const geometry = feature.getGeometry();
-      if (geometry instanceof Polygon) {
+      const geometry = feature.getGeometry();      if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
         // Основной стиль для выделения (жирная/яркая обводка)
         styles.push(
           new Style({
@@ -768,6 +826,23 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
     draw.on('drawend', (event) => {
       const feature = event.feature;
+      // Упрощаем геометрию полигона через turf.simplify (Visvalingam-Whyatt)
+      const geometry = feature.getGeometry();
+      if (geometry && geometry instanceof Polygon) {
+        const format = new GeoJSON();
+        const geojsonGeom = format.writeGeometryObject(geometry, {
+          dataProjection: 'EPSG:4326',
+          featureProjection: 'EPSG:3857',
+        });
+        // turf.simplify работает с GeoJSON geometry
+        const simplifiedGeojson = simplify(geojsonGeom, { tolerance: 0.00005 });
+        // Преобразуем обратно в OpenLayers Polygon
+        const simplified = format.readGeometry(simplifiedGeojson, {
+          dataProjection: 'EPSG:4326',
+          featureProjection: 'EPSG:3857',
+        });
+        feature.setGeometry(simplified);
+      }
       feature.setStyle(createVectorStyle());
 
       if (onFeatureAdded) {
@@ -1121,10 +1196,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
         // Берем последний нарисованный полигон
         const lastFeature = features[features.length - 1];
-        const geometry = lastFeature.getGeometry();
-
-        if (!geometry || !(geometry instanceof Polygon)) {
-          console.error('Last feature is not a polygon');
+        const geometry = lastFeature.getGeometry();        if (!geometry || !(geometry instanceof Polygon || geometry instanceof MultiPolygon)) {
+          console.error('Last feature is not a polygon or multipolygon');
           return;
         }
 
@@ -1263,11 +1336,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           const lastFeature = features[features.length - 1];
           const geometry = lastFeature.getGeometry();
           console.log('Последний объект:', lastFeature);
-          console.log('Геометрия объекта:', geometry);
-
-          if (!geometry || !(geometry instanceof Polygon)) {
-            console.error('Последний объект не является полигоном');
-            reject(new Error('Last feature is not a polygon'));
+          console.log('Геометрия объекта:', geometry);          if (!geometry || !(geometry instanceof Polygon || geometry instanceof MultiPolygon)) {
+            console.error('Последний объект не является полигоном или мультиполигоном');
+            reject(new Error('Last feature is not a polygon or multipolygon'));
             return;
           }
 
@@ -1387,10 +1458,8 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
         // Берем последний нарисованный полигон
         const lastFeature = features[features.length - 1];
-        const geometry = lastFeature.getGeometry();
-
-        if (!geometry || !(geometry instanceof Polygon)) {
-          console.error('Последний объект не является полигоном');
+        const geometry = lastFeature.getGeometry();        if (!geometry || !(geometry instanceof Polygon || geometry instanceof MultiPolygon)) {
+          console.error('Последний объект не является полигоном или мультиполигоном');
           return;
         }
 
@@ -1488,12 +1557,10 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         if (index < 0 || index >= features.length) {
           console.error('Invalid polygon index:', index);
           return;
-        }
-
-        const feature = features[index];
+        }        const feature = features[index];
         const geometry = feature.getGeometry();
         
-        if (geometry instanceof Polygon) {
+        if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
           const extent = geometry.getExtent();
           const view = mapInstanceRef.current.getView();
 
@@ -1503,7 +1570,51 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             duration: 1000
           });
           
-          console.log(`Navigated to polygon ${index}`);
+          console.log(`Navigated to ${geometry instanceof MultiPolygon ? 'MultiPolygon' : 'Polygon'} ${index}`);
+        }      },
+      navigateToPolygonPart: (polygonIndex: number, partIndex: number) => {
+        if (!mapInstanceRef.current || !vectorSourceRef.current) return;
+
+        // Используем полигоны из vectorSource для навигации
+        const features = vectorSourceRef.current.getFeatures();
+        if (polygonIndex < 0 || polygonIndex >= features.length) {
+          console.error('Invalid polygon index:', polygonIndex);
+          return;
+        }
+
+        const feature = features[polygonIndex];
+        const geometry = feature.getGeometry();
+        
+        if (geometry instanceof MultiPolygon) {
+          const polygons = geometry.getPolygons();
+          if (partIndex < 0 || partIndex >= polygons.length) {
+            console.error('Invalid part index:', partIndex);
+            return;
+          }
+
+          const partPolygon = polygons[partIndex];
+          const extent = partPolygon.getExtent();
+          const view = mapInstanceRef.current.getView();
+
+          view.fit(extent, {
+            padding: [50, 50, 50, 50],
+            maxZoom: 16,
+            duration: 1000
+          });
+          
+          console.log(`Navigated to part ${partIndex} of MultiPolygon ${polygonIndex}`);
+        } else {
+          // Fallback к обычной навигации если это не MultiPolygon
+          console.log('Feature is not a MultiPolygon, falling back to regular navigation');
+          const extent = geometry?.getExtent();
+          if (extent) {
+            const view = mapInstanceRef.current.getView();
+            view.fit(extent, {
+              padding: [50, 50, 50, 50],
+              maxZoom: 16,
+              duration: 1000
+            });
+          }
         }
       },
       getLoadedPolygons: () => {
@@ -1568,6 +1679,37 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           if (Array.isArray(feature)) {
             console.error('Expected single feature, got array');
             return;
+          }          // Упрощаем геометрию, если это полигон или мультиполигон через turf.simplify (Visvalingam-Whyatt)
+          const geometry = feature.getGeometry();
+          if (geometry && (geometry instanceof Polygon || geometry instanceof MultiPolygon)) {
+            // Переводим в GeoJSON
+            const geojsonGeom = format.writeGeometryObject(geometry, {
+              dataProjection: 'EPSG:4326',
+              featureProjection: 'EPSG:3857',
+            });
+            // Более деликатное упрощение: tolerance ~5м, highQuality по умолчанию (false)
+            const simplifiedGeojson = simplify(geojsonGeom, { tolerance: 0.01, highQuality: false });
+            // Обратно в OpenLayers Polygon
+            const simplified = format.readGeometry(simplifiedGeojson, {
+              dataProjection: 'EPSG:4326',
+              featureProjection: 'EPSG:3857',
+            });
+            feature.setGeometry(simplified);
+          } else if (geometry && geometry instanceof MultiPolygon) {
+            console.log('Processing MultiPolygon geometry for simplification');
+            // Переводим в GeoJSON
+            const geojsonGeom = format.writeGeometryObject(geometry, {
+              dataProjection: 'EPSG:4326',
+              featureProjection: 'EPSG:3857',
+            });
+            // Упрощаем MultiPolygon
+            const simplifiedGeojson = simplify(geojsonGeom, { tolerance: 0.01, highQuality: false });
+            // Обратно в OpenLayers MultiPolygon
+            const simplified = format.readGeometry(simplifiedGeojson, {
+              dataProjection: 'EPSG:4326',
+              featureProjection: 'EPSG:3857',
+            });
+            feature.setGeometry(simplified);
           }
 
           // Устанавливаем стиль для фичи

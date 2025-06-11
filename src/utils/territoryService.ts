@@ -133,27 +133,32 @@ async function fetchTerritoryGeoJson(territoryName: string): Promise<TerritoryBo
     
     if (place.geojson.type === 'Polygon') {
       console.log('Processing Polygon geometry');
-      coordinates = ensureLonLat(place.geojson.coordinates) as number[][][];
-    } else if (place.geojson.type === 'MultiPolygon') {
+      coordinates = ensureLonLat(place.geojson.coordinates) as number[][][];    } else if (place.geojson.type === 'MultiPolygon') {
       console.log('Processing MultiPolygon geometry');
-      // Fix for MultiPolygon handling - we need to properly format the coordinates
+      // Правильная обработка MultiPolygon для территорий с несколькими частями (как Россия)
       try {
-        const multiPolygon = place.geojson.coordinates as number[][][];
+        const multiPolygon = place.geojson.coordinates as number[][][][];
         
-        // In case of MultiPolygon, we take all polygons
-        // Each polygon is an array with the first element being the outer ring
-        // and subsequent elements being inner rings (holes)
+        // MultiPolygon состоит из массива полигонов
+        // Каждый полигон представляет собой массив колец (первое - внешнее, остальные - дырки)
         coordinates = [];
         
-        multiPolygon.forEach(polygon => {
-          // Take only the outer ring of each polygon (element 0)
+        multiPolygon.forEach((polygon, idx) => {
+          console.log(`Processing polygon ${idx} with ${polygon.length} rings`);
           if (polygon && polygon.length > 0) {
-            const processedPolygon = ensureLonLat(polygon[0]) as number[][];
-            if (processedPolygon && processedPolygon.length > 0) {
-              coordinates.push(processedPolygon);
+            // Берем внешнее кольцо полигона (первый элемент)
+            const outerRing = polygon[0];
+            if (outerRing && outerRing.length > 0) {
+              const processedPolygon = ensureLonLat(outerRing) as number[][];
+              if (processedPolygon && processedPolygon.length > 0) {
+                coordinates.push(processedPolygon);
+                console.log(`Added polygon ${idx} with ${processedPolygon.length} points`);
+              }
             }
           }
         });
+        
+        console.log(`Total polygons processed: ${coordinates.length}`);
       } catch (err) {
         console.error('Error processing MultiPolygon:', err);
       }
@@ -251,11 +256,23 @@ export const searchTerritories = async (query: string): Promise<TerritoryBounds[
       parseFloat(place.boundingbox[1])
     ];
     if (place.geojson && place.geojson.type === 'Polygon') {
-      coordinates = ensureLonLat(place.geojson.coordinates) as number[][][];
-    } else if (place.geojson && place.geojson.type === 'MultiPolygon') {
-      coordinates = (place.geojson.coordinates as number[][][][])
-        .map(poly => ensureLonLat(poly))
-        .flat(1) as number[][][];
+      coordinates = ensureLonLat(place.geojson.coordinates) as number[][][];    } else if (place.geojson && place.geojson.type === 'MultiPolygon') {
+      // Правильная обработка MultiPolygon для поиска
+      const multiPolygon = place.geojson.coordinates as number[][][][];
+      coordinates = [];
+      
+      multiPolygon.forEach(polygon => {
+        if (polygon && polygon.length > 0) {
+          // Берем внешнее кольцо полигона (первый элемент)
+          const outerRing = polygon[0];
+          if (outerRing && outerRing.length > 0) {
+            const processedPolygon = ensureLonLat(outerRing) as number[][];
+            if (processedPolygon && processedPolygon.length > 0) {
+              coordinates.push(processedPolygon);
+            }
+          }
+        }
+      });
     }
     if (coordinates.length) {
       results.push({
