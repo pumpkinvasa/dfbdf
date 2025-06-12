@@ -25,14 +25,13 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { GeoJSON } from 'ol/format';
 import ProgressOverlay from '../components/ProgressOverlay';
 import { v4 as uuidv4 } from 'uuid';
+import { API_CONFIG } from '../config/apiConfig';
 
 interface GeoJSONFeature {
   type: string;
   geometry: any;
   properties: Record<string, any>;
 }
-
-const ACCESS_KEY = "KCN8EFFcO6eTQEBAK4pwqrkhkm0YbGjwvYs_4vIcjMurz6_LXyDimO66IdEHNHD7";
 
 
 const HomePage: React.FC = () => {
@@ -613,11 +612,11 @@ const HomePage: React.FC = () => {
       setAnalysisProgress(25);
 
       // Отправляем запрос на детекцию построек (без callback_url)
-      const response = await fetch(`http://localhost:8888/v1/maps/detect_buildings/${taskId}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.DETECT_BUILDINGS(taskId)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ACCESS_KEY}`,
+          'Authorization': `Bearer ${API_CONFIG.ACCESS_KEY}`,
         },
         body: JSON.stringify({
           image_base64: imageBase64
@@ -696,11 +695,11 @@ const HomePage: React.FC = () => {
       setAnalysisProgress(25);
 
       // Отправляем запрос на сегментацию (без callback_url)
-      const response = await fetch(`http://localhost:8888/v1/maps/segment_trenches/${taskId}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEGMENT_TRENCHES(taskId)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ACCESS_KEY}`,
+          'Authorization': `Bearer ${API_CONFIG.ACCESS_KEY}`,
         },
         body: JSON.stringify({
           image_base64: imageBase64
@@ -744,7 +743,7 @@ const HomePage: React.FC = () => {
   // SSE для получения обновлений анализа от бэкенда по taskId
   useEffect(() => {
     if (!currentTaskId) return;
-    const eventSource = new EventSource(`http://localhost:8888/v1/maps/events/${currentTaskId}?api_key=${ACCESS_KEY}`);
+    const eventSource = new EventSource(`http://localhost:8888/v1/maps/events/${currentTaskId}?api_key=${API_CONFIG.ACCESS_KEY}`);
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = function(event) {
@@ -859,11 +858,11 @@ const HomePage: React.FC = () => {
         setCompositesMenuOpen(false);
 
         // Отправляем координаты на бэкенд (без callback_url)
-        const response = await fetch(`http://localhost:8888/v1/maps/get_long_trenches_composite/${taskId}`, {
+        const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.LONG_TRENCHES_COMPOSITE(taskId)}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${ACCESS_KEY}`,
+            'Authorization': `Bearer ${API_CONFIG.ACCESS_KEY}`,
           },
           body: JSON.stringify({
             coords: coords.map(feature => ({

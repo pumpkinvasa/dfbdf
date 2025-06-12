@@ -24,6 +24,7 @@ import { Overlay } from 'ol';
 import Feature from 'ol/Feature';
 import { Coordinate } from 'ol/coordinate';
 import simplify from '@turf/simplify';
+import { API_CONFIG } from '../config/apiConfig';
 
 // Тип для ref
 export interface OpenLayersMapHandle {
@@ -356,7 +357,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         case 'BingAerial':
           return new TileLayer({
             source: new BingMaps({
-              key: 'AuhiCJHlGzhg93IqUH_oCpl_-ZUrIE6SPftlyGYUvr9Amx5nzA-WqGcPquyFZl4L',
+              key: API_CONFIG.BING_MAPS_KEY,
               imagerySet: 'Aerial',
               ...baseOptions,
             }),
@@ -364,28 +365,28 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         case 'YandexSatellite':
           return new TileLayer({
             source: new XYZ({
-              url: 'https://sat01.maps.yandex.net/tiles?l=sat&v=3.1025.0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+              url: API_CONFIG.TILE_URLS.YANDEX,
               ...baseOptions,
             }),
           });
         case 'GoogleSatellite':
           return new TileLayer({
             source: new XYZ({
-              url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+              url: API_CONFIG.TILE_URLS.GOOGLE,
               ...baseOptions,
             }),
           });
         case 'ESRISatellite':
           return new TileLayer({
             source: new XYZ({
-              url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              url: API_CONFIG.TILE_URLS.ESRI_SAT,
               ...baseOptions,
             }),
           });
         case 'ESRIStreet':
           return new TileLayer({
             source: new XYZ({
-              url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+              url: API_CONFIG.TILE_URLS.ESRI_STREET,
               ...baseOptions,
             }),
           });
@@ -409,7 +410,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       layers.borders = new TileLayer({
         source: new XYZ({
-          url: 'https://tiles.wmflabs.org/osm-intl/{z}/{x}/{y}.png',
+          url: API_CONFIG.TILE_URLS.BORDERS,
           ...overlayOptions,
         }),
         opacity: 0.7,
@@ -418,7 +419,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       layers.contour = new TileLayer({
         source: new XYZ({
-          url: 'https://maps.refuges.info/hiking/{z}/{x}/{y}.png',
+          url: API_CONFIG.TILE_URLS.CONTOUR,
           ...overlayOptions,
         }),
         opacity: 0.6,
@@ -427,7 +428,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
       layers.labels = new TileLayer({
         source: new XYZ({
-          url: 'https://stamen-tiles-{a-d}.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png',
+          url: API_CONFIG.TILE_URLS.LABELS,
           ...overlayOptions,
         }),
         opacity: 1.0,
@@ -437,7 +438,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           case 'BingAerial':
             return new TileLayer({
               source: new XYZ({
-                url: 'https://ecn.t0.tiles.virtualearth.net/tiles/h{quadkey}.jpeg?g=1',
+                url: API_CONFIG.TILE_URLS.BING_ROADS,
                 ...overlayOptions,
               }),
               opacity: 0.8,
@@ -446,7 +447,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           case 'YandexSatellite':
             return new TileLayer({
               source: new XYZ({
-                url: 'https://vec01.maps.yandex.net/tiles?l=skl&v=20.06.03-0&x={x}&y={y}&z={z}&scale=1&lang=ru_RU',
+                url: API_CONFIG.TILE_URLS.YANDEX_ROADS,
                 ...overlayOptions,
               }),
               opacity: 0.8,
@@ -455,7 +456,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           case 'GoogleSatellite':
             return new TileLayer({
               source: new XYZ({
-                url: 'https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
+                url: API_CONFIG.TILE_URLS.GOOGLE_ROADS,
                 ...overlayOptions,
               }),
               opacity: 0.8,
@@ -464,7 +465,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           case 'ESRISatellite':
             return new TileLayer({
               source: new XYZ({
-                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+                url: API_CONFIG.TILE_URLS.ESRI_TRANSPORT,
                 ...overlayOptions,
               }),
               opacity: 0.8,
@@ -953,7 +954,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           return coord[0] < left[0] ? coord : left;
         }, topPoint);
 
-      // Добавляем метку с площадью
       styles.push(
         new Style({
           geometry: new Point(leftTopPoint),
@@ -1198,7 +1198,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             width: 3
           }),
           fill: new Fill({
-            color: 'rgba(0, 179, 179, 0.4)'
+            color: 'rgba(0,179,179,0.4)'
           })
         });
 
@@ -1878,6 +1878,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
               featureProjection: 'EPSG:3857',
             });
             // Упрощаем MultiPolygon
+           
             const simplifiedGeojson = simplify(geojsonGeom, { tolerance: 0.01, highQuality: false });
             // Обратно в OpenLayers MultiPolygon
             const simplified = format.readGeometry(simplifiedGeojson, {

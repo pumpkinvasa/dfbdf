@@ -149,42 +149,10 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
   };
 
   // Обработка выбора страны
-  const handleCountrySelect = async (territory: Territory | null) => {
+  const handleCountrySelect = (territory: Territory | null) => {
     setSelectedCountry(territory);
     setSearchValue('');
-    if (territory) {
-      setLoading(true);
-      setError(null);
-      try {
-        const bounds = await getTerritoryBounds(territory.name);
-        if (bounds) {
-          let territoryWithCoordinates: Territory;
-          if (bounds.coordinates && bounds.coordinates.length > 0) {
-            territoryWithCoordinates = {
-              ...territory,
-              coordinates: bounds.coordinates,
-              bbox: bounds.bbox
-            };
-          } else if (bounds.bbox) {
-            territoryWithCoordinates = {
-              ...territory,
-              coordinates: [createPolygonFromBbox(bounds.bbox)],
-              bbox: bounds.bbox
-            };
-          } else {
-            throw new Error('Координаты территории недоступны');
-          }
-          setSelectedCountry(territoryWithCoordinates);
-          // Не переходим к областям автоматически!
-        } else {
-          throw new Error('Координаты территории недоступны');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Ошибка при получении границ страны');
-      } finally {
-        setLoading(false);
-      }
-    }
+    // Не подгружаем координаты! Только сохраняем выбор
   };
 
   // Кнопка для перехода к выбору областей
@@ -199,88 +167,57 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
   };
 
   // Обработка выбора региона
-  const handleRegionSelect = async (region: Territory | null) => {
-    if (!region) {
-      setSelectedRegion(null);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log(`Fetching bounds for region: ${region.name}`);
-      const bounds = await getTerritoryBounds(region.name);
-      console.log('Got region bounds:', bounds);
-      
-      if (bounds) {
-        let regionWithCoordinates: Territory;
-        
-        if (bounds.coordinates && bounds.coordinates.length > 0) {
-          console.log(`Found ${bounds.coordinates.length} coordinate sets for region`);
-          // Если есть точные координаты границ, используем их
-          regionWithCoordinates = {
-            ...region,
-            coordinates: bounds.coordinates,
-            bbox: bounds.bbox
-          };
-        } else if (bounds.bbox) {
-          console.log('Using bbox to create rectangular polygon for region');
-          // Если нет точных координат, но есть bbox, создаем прямоугольный полигон
-          regionWithCoordinates = {
-            ...region,
-            coordinates: [createPolygonFromBbox(bounds.bbox)],
-            bbox: bounds.bbox
-          };
-        } else {
-          throw new Error('Координаты региона недоступны');
-        }
-        
-        console.log('Region with coordinates:', regionWithCoordinates);
-        setSelectedRegion(regionWithCoordinates);
-      } else {
-        throw new Error('Координаты региона недоступны');
-      }
-    } catch (err) {
-      console.error('Error fetching region bounds:', err);
-      setError(err instanceof Error ? err.message : 'Ошибка при получении границ региона');
-      // Всё равно сохраняем выбранный регион, даже без координат
-      setSelectedRegion(region);
-    } finally {
-      setLoading(false);
-    }
+  const handleRegionSelect = (region: Territory | null) => {
+    setSelectedRegion(region);
+    // Не подгружаем координаты! Только сохраняем выбор
   };
 
-  // Обработка возврата к выбору страны
-  const handleBackToCountry = () => {
-    setStep('country');
-    setSelectedRegion(null);
-    setAvailableRegions([]);
-    setSearchValue('');
-    const countries = territories.filter(t => t.type === 'country');
-    setFilteredTerritories(countries);
-  };
+  // Нормализация координат полигона
+const normalizePolygonCoordinates = (coords: any): number[][][] => {
+  if (Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0]) && typeof coords[0][0][0] === 'number') {
+    return coords;
+  }
+  if (Array.isArray(coords) && Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {
+    return [coords];
+  }
+  return coords;
+};
 
   // Финальный выбор территории
   const handleFinalSelect = async (territory: Territory) => {
     setLoading(true);
     setError(null);
-
     try {
-      let territoryWithCoordinates: Territory;
-
-      if (territory.coordinates) {
-        territoryWithCoordinates = territory;
-      } else if (territory.bbox) {
-        // Создаем простой прямоугольный полигон из bbox
+      let territoryWithCoordinates: Territory = territory;
+      // Если нет координат, подгружаем их только сейчас
+      if (!territory.coordinates) {
+        const bounds = await getTerritoryBounds(territory.name);
+        if (bounds) {
+          if (bounds.coordinates && bounds.coordinates.length > 0) {
+            territoryWithCoordinates = {
+              ...territory,
+              coordinates: normalizePolygonCoordinates(bounds.coordinates),
+              bbox: bounds.bbox
+            };
+          } else if (bounds.bbox) {
+            territoryWithCoordinates = {
+              ...territory,
+              coordinates: [createPolygonFromBbox(bounds.bbox)],
+              bbox: bounds.bbox
+            };
+          } else {
+            throw new Error('Координаты территории недоступны');
+          }
+        } else {
+          throw new Error('Координаты территории недоступны');
+        }
+      } else {
+        // Always normalize coordinates
         territoryWithCoordinates = {
           ...territory,
-          coordinates: [createPolygonFromBbox(territory.bbox)]
+          coordinates: normalizePolygonCoordinates(territory.coordinates)
         };
-      } else {
-        throw new Error('Координаты территории недоступны');
       }
-
       onTerritorySelect(territoryWithCoordinates);
       onClose();
       resetSelectorState(); // Сбросить состояния после добавления полигона
@@ -335,6 +272,16 @@ const QuickPolygonSelector: React.FC<QuickPolygonSelectorProps> = ({
   const handleClose = () => {
     resetSelectorState();
     onClose();
+  };
+
+  // Обработка возврата к выбору страны
+  const handleBackToCountry = () => {
+    setStep('country');
+    setSelectedRegion(null);
+    setAvailableRegions([]);
+    setSearchValue('');
+    const countries = territories.filter(t => t.type === 'country');
+    setFilteredTerritories(countries);
   };
 
   const getCurrentSelection = () => {

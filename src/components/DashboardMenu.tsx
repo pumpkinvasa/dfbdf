@@ -106,27 +106,45 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
     } catch (error) {
       console.error('Ошибка при скачивании полигона:', error);
     }
-  };  const handleTerritorySelect = (territory: any) => {
+  };  const normalizePolygonCoordinates = (coords: any): number[][][] => {
+    // If it's a single ring (Polygon), wrap in array
+    if (Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0]) && typeof coords[0][0][0] === 'number') {
+      return coords;
+    }
+    // If it's a flat array, wrap twice
+    if (Array.isArray(coords) && Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {
+      return [coords];
+    }
+    return coords;
+  };
+
+  const handleTerritorySelect = (territory: any) => {
     if (!territory.coordinates || !onTerritoryPolygonAdd) return;
 
     try {
-      // Создаем GeoJSON объект из координат территории
       let geometry;
-      
-      if (territory.coordinates.length === 1) {
-        // Одна часть территории - обычный полигон
+      const coords = territory.coordinates;
+      if (coords.length === 1) {
+        // Polygon
         geometry = {
           type: 'Polygon',
-          coordinates: territory.coordinates
+          coordinates: normalizePolygonCoordinates(coords)
         };
       } else {
-        // Несколько частей территории - мультиполигон
+        // MultiPolygon
         geometry = {
           type: 'MultiPolygon',
-          coordinates: territory.coordinates.map((polygon: number[][]) => [polygon])
+          coordinates: coords.map((polygon: any) => normalizePolygonCoordinates(polygon))
         };
       }
-
+      // Validate geometry structure
+      if (
+        (geometry.type === 'Polygon' && !Array.isArray(geometry.coordinates[0][0])) ||
+        (geometry.type === 'MultiPolygon' && !Array.isArray(geometry.coordinates[0][0][0]))
+      ) {
+        console.error('Invalid geometry structure:', geometry);
+        return;
+      }
       const geoJSON = {
         type: 'Feature',
         properties: {
@@ -134,14 +152,10 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
           type: territory.type,
           parent: territory.parent,
           source: 'quick_polygon',
-          parts: territory.coordinates.length // Добавляем информацию о количестве частей
+          parts: coords.length
         },
         geometry
       };
-
-      console.log('Создан полигон территории:', territory.name, 
-                  `(${territory.coordinates.length} ${territory.coordinates.length === 1 ? 'часть' : 'частей'})`, 
-                  geoJSON);
       onTerritoryPolygonAdd(geoJSON);
     } catch (error) {
       console.error('Ошибка при создании полигона территории:', error);
