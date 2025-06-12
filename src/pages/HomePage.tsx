@@ -1109,10 +1109,9 @@ const HomePage: React.FC = () => {
             height: '100%',
             overflow: 'hidden',
             position: 'relative',
-          }}
-        >          <OpenLayersMap
+          }}        >          <OpenLayersMap
             ref={mapRef}
-            initialCenter={[37.6173, 55.7558]}
+            initialCenter={[37.8, 48.0]}
             initialZoom={10}
             center={mapCenter}
             zoom={mapZoom}
