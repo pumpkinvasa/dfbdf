@@ -451,7 +451,7 @@ const normalizePolygonCoordinates = (coords: any): number[][][] => {
                 Координаты: {getCurrentSelection()!.bbox!.map((coord: number) => coord.toFixed(4)).join(', ')}
               </Typography>
             )}
-            {getCurrentSelection()!.coordinates && getCurrentSelection()!.coordinates!.length > 1 && (
+            {getCurrentSelection()!.coordinates && getCurrentSelection()!.coordinates!.length > 1 && false && (
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                 Территория состоит из {getCurrentSelection()!.coordinates!.length} отдельных частей
               </Typography>

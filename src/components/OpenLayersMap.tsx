@@ -560,12 +560,9 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         );      } else if (geometry instanceof MultiPolygon) {
         // Проверяем, нужно ли разбивать MultiPolygon на части
         const shouldShowParts = shouldShowPolygonParts(feature, geometry);
-        
+        const polygons = geometry.getPolygons();
+        // Основной стиль для MultiPolygon
         if (shouldShowParts) {
-          // Получаем полигоны из MultiPolygon и отображаем каждую часть отдельно
-          const polygons = geometry.getPolygons();
-          
-          // Добавляем стили для каждого видимого полигона в мультиполигоне
           polygons.forEach((polygon, index) => {
             // Проверяем видимость конкретной части
             const partVisibilityKey = `part_${index}_visible`;
@@ -617,9 +614,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
               }),
             })
           );
-
           // Добавляем точки на углах для всех внешних контуров
-          const polygons = geometry.getPolygons();
           polygons.forEach(polygon => {
             const coordinates = polygon.getCoordinates()[0] as Coordinate[];
             coordinates.slice(0, -1).forEach((coord: Coordinate) => {
@@ -628,45 +623,55 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
                   geometry: new Point(coord),
                   image: new CircleStyle({
                     radius: 4,
-                    fill: new Fill({
-                      color: '#ffffff',
-                    }),
-                    stroke: new Stroke({
-                      color: '#00b3b3',
-                      width: 2,
-                    }),
+                    fill: new Fill({ color: '#ffffff' }),
+                    stroke: new Stroke({ color: '#00b3b3', width: 2 }),
                   }),
                 })
               );
             });
           });
-        }        // Вычисляем общую площадь всех полигонов
-        const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
-        const areaKm2 = (areaM2 / 1_000_000).toFixed(2);
-
-        // Для метки с площадью используем центр экстента всего мультиполигона
-        const extent = geometry.getExtent();
-        const centerX = (extent[0] + extent[2]) / 2;
-        const centerY = (extent[1] + extent[3]) / 2;
-        
-        // Получаем количество полигонов для метки
-        const polygons = geometry.getPolygons();
-        
-        styles.push(
-          new Style({
-            geometry: new Point([centerX, centerY]),
-            text: new Text({
-              text: `${areaKm2} км² (${polygons.length} ${polygons.length === 1 ? 'часть' : 'частей'})`,
-              font: '12px Arial',
-              fill: new Fill({ color: '#ffffff' }),
-              backgroundFill: new Fill({ color: '#000000' }),
-              padding: [2, 2, 2, 2],
-              offsetY: -15,
-              textAlign: 'center',
-              overflow: true,
-            }),
-          })
-        );
+          // === КИЛОМЕТРАЖ ЛЕЙБЛ ДЛЯ СЛОЖНЫХ ФИГУР ===
+          // Находим верхнюю грань (наибольший Y)
+          let leftTopPoint: Coordinate | null = null;
+          let topY = -Infinity;
+          polygons.forEach(polygon => {
+            const coords = polygon.getCoordinates()[0] as Coordinate[];
+            coords.slice(0, -1).forEach(coord => {
+              if (coord[1] > topY) topY = coord[1];
+            });
+          });
+          // Среди всех точек с этим Y ищем минимальный X
+          let minX = Infinity;
+          polygons.forEach(polygon => {
+            const coords = polygon.getCoordinates()[0] as Coordinate[];
+            coords.slice(0, -1).forEach(coord => {
+              if (Math.abs(coord[1] - topY) < 0.0001 && coord[0] < minX) {
+                minX = coord[0];
+                leftTopPoint = coord;
+              }
+            });
+          });
+          if (leftTopPoint) {
+            const areaM2 = getArea(geometry, { projection: 'EPSG:3857' });
+            const areaKm2 = (areaM2 / 1_000_000).toFixed(2);
+            styles.push(
+              new Style({
+                geometry: new Point(leftTopPoint),
+                text: new Text({
+                  text: `${areaKm2} км²`,
+                  font: '12px Arial',
+                  fill: new Fill({ color: '#ffffff' }),
+                  backgroundFill: new Fill({ color: '#000000' }),
+                  padding: [2, 2, 2, 2],
+                  offsetY: -15,
+                  offsetX: 10,
+                  textAlign: 'left',
+                  overflow: true,
+                }),
+              })
+            );
+          }
+        }
       }
 
       return styles;
@@ -1172,7 +1177,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
             case 3:
               return 'rgba(255, 215, 0, 0.6)'; // Желтый
             default:
-              return 'rgba(0, 179, 179, 0.4)'; // Стандартный цвет
+              return 'rgba(0,179,179,0.4)'; // Стандартный цвет
           }
         };
 
