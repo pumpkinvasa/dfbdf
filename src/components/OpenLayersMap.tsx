@@ -1006,7 +1006,6 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
 
     draw.on('drawend', (event) => {
       const feature = event.feature;
-      // Упрощаем геометрию полигона через turf.simplify (Visvalingam-Whyatt)
       const geometry = feature.getGeometry();
       if (geometry && geometry instanceof Polygon) {
         const format = new GeoJSON();
@@ -1014,9 +1013,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
           dataProjection: 'EPSG:4326',
           featureProjection: 'EPSG:3857',
         });
-        // turf.simplify работает с GeoJSON geometry
         const simplifiedGeojson = simplify(geojsonGeom, { tolerance: 0.00005 });
-        // Преобразуем обратно в OpenLayers Polygon
         const simplified = format.readGeometry(simplifiedGeojson, {
           dataProjection: 'EPSG:4326',
           featureProjection: 'EPSG:3857',
