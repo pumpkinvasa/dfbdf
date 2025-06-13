@@ -1205,52 +1205,16 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         });
 
         features.forEach((feature, index) => {
-          if (colorByHealth) {
-            // Получаем значение "Здоровье" из свойств объекта
-            const properties = feature.getProperties();
-            const healthValue = properties?.Здоровье !== undefined ? Number(properties.Здоровье) : undefined;
-            console.log(`Feature ${index} health:`, healthValue);
-            
-            if (healthValue !== undefined) {
-              // Создаем индивидуальный стиль на основе значения "Здоровье"
-              const healthStyle = new Style({
-                stroke: new Stroke({
-                  color: getHealthStrokeColor(healthValue),
-                  width: 3
-                }),
-                fill: new Fill({
-                  color: getHealthColor(healthValue)
-                }),
-                // Добавляем текстовую метку с значением id объекта
-                text: properties?.fid ? new Text({
-                  text: `${properties.fid}`,
-                  font: 'bold 14px Arial',
-                  fill: new Fill({
-                    color: '#FFFFFF'
-                  }),
-                  stroke: new Stroke({
-                    color: '#000000',
-                    width: 2
-                  }),
-                  offsetY: -15
-                }) : undefined
-              });
-              feature.setStyle(healthStyle);
-            } else {
-              feature.setStyle(defaultReservoirStyle);
-            }
-          } else {
-            // Применяем стандартный стиль
-            feature.setStyle(defaultReservoirStyle);
-          }
-          console.log(`Feature ${index} geometry:`, feature.getGeometry()?.getType());
+          // Не задаём индивидуальный стиль, чтобы работал style из vectorLayer (createVectorStyle)
+          // Это обеспечит одинаковое отображение для всех полигонов (нарисованных и загруженных)
+          // Если потребуется подсветка по здоровью — setStyle можно вернуть по условию
+          // console.log(`Feature ${index} geometry:`, feature.getGeometry()?.getType());
         });
 
         // Store loaded polygons in ref for navigation
         loadedPolygonsRef.current = [...features];
 
         // Очищаем существующие объекты перед добавлением новых
-        vectorSourceRef.current.clear();
         vectorSourceRef.current.addFeatures(features);
         
         console.log('Features added to vector source. Total features:', vectorSourceRef.current.getFeatures().length);        if (features.length > 0) {
@@ -1921,6 +1885,7 @@ const OpenLayersMap = forwardRef<OpenLayersMapHandle, OpenLayersMapProps>(
         
         if (geometry instanceof MultiPolygon) {
           // Для MultiPolygon храним видимость частей в свойствах фичи
+
           const partVisibilityKey = `part_${partIndex}_visible`;
           feature.set(partVisibilityKey, visible);
           

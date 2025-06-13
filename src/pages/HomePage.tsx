@@ -117,20 +117,15 @@ const HomePage: React.FC = () => {
             setSnackbarOpen(true);
 
             const reader = new FileReader();
-            reader.onload = (event) => {          try {
+            reader.onload = (event) => {
+              try {
                 const geoJSON = JSON.parse(event.target?.result as string);
-                
                 // Проверка загруженного файла
                 if (!geoJSON || !geoJSON.features || !Array.isArray(geoJSON.features) || geoJSON.features.length === 0) {
                   throw new Error('Файл не содержит объектов GeoJSON');
                 }
-                
                 console.log(`Загружено объектов: ${geoJSON.features.length}`);
-                
-                // Отображаем прогресс-бар на 15 секунд                setIsAnalyzing(true);
-                setAnalysisStatus('downloading');
-                setAnalysisDetail(`Загрузка резервуаров: ${file.name}`);
-                  // Количество объектов для статистики
+                // Считаем статистику по здоровью резервуаров
                 const featureCount = geoJSON.features.length;
                 const healthStatistics: {[key: string]: number} = {
                   '0': 0, // красный
@@ -139,8 +134,6 @@ const HomePage: React.FC = () => {
                   '3': 0, // желтый
                   'unknown': 0
                 };
-                
-                // Собираем статистику по здоровью резервуаров
                 geoJSON.features.forEach((feature: any) => {
                   const health = feature.properties?.Здоровье;
                   if (health !== undefined) {
@@ -150,80 +143,30 @@ const HomePage: React.FC = () => {
                     healthStatistics['unknown']++;
                   }
                 });
-                
-                // Симулируем прогресс загрузки в течение 15 секунд
-                let progress = 0;
-                let currentStage = 0;
-                const stages = [
-                  'Анализ структуры данных...',
-                  'Проверка целостности координат...',
-                  'Преобразование проекции...',
-                  'Расчет параметров резервуаров...',
-                  'Загрузка стилей отображения...',
-                  'Применение цветовой схемы...',
-                  'Финальная обработка...'
-                ];
-                
-                const progressInterval = setInterval(() => {
-                  progress += 100 / 15; // 15 секунд до 100%
-                  
-                  // Обновляем информационное сообщение на разных этапах прогресса
-                  if (progress > currentStage * (100 / stages.length) && currentStage < stages.length) {
-                    setAnalysisDetail(`${stages[currentStage]} (${featureCount} объектов)`);
-                    currentStage++;
+                // --- УБРАНО удаление других объектов ---
+                if (mapRef.current && mapRef.current.loadGeoJSON) {
+                  mapRef.current.loadGeoJSON(geoJSON, undefined, false);
+                  if (mapRef.current.exportFeatures) {
+                    const allFeatures = mapRef.current.exportFeatures();
+                    setAoiPolygons(allFeatures);
                   }
-                  
-                  if (progress >= 100) {
-                    clearInterval(progressInterval);
-                    progress = 100;
-                      // После завершения прогресс-бара загружаем данные на карту
-                    if (mapRef.current && mapRef.current.loadGeoJSON) {
-                      // Очищаем предыдущие объекты перед загрузкой новых
-                      mapRef.current.clearAllFeatures();
-                      
-                      // Загружаем GeoJSON на карту с раскраской по здоровью
-                      mapRef.current.loadGeoJSON(geoJSON, undefined, true);
-                      
-                      // Обновляем список полигонов AOI после загрузки
-                      if (mapRef.current.exportFeatures) {
-                        const allFeatures = mapRef.current.exportFeatures();
-                        setAoiPolygons(allFeatures);
+                  const healthSummary = `Зеленые: ${healthStatistics['2']}, Желтые: ${healthStatistics['3']}, Красные: ${healthStatistics['0'] + healthStatistics['1']}`;
+                  setSnackbarMessage(`GeoJSON успешно загружен: ${featureCount} объектов. ${healthSummary}`);
+                  if (file.name.toLowerCase().includes('oil') || 
+                      file.name.toLowerCase().includes('reservoir') || 
+                      (geoJSON.name && geoJSON.name.includes('БОЧКИ'))) {
+                    setSelectedSearches(prev => {
+                      if (!prev.includes('reservoirs')) {
+                        return [...prev, 'reservoirs'];
                       }
-                        // Формируем статистику по состоянию резервуаров
-                      const healthSummary = `Зеленые: ${healthStatistics['2']}, Желтые: ${healthStatistics['3']}, Красные: ${healthStatistics['0'] + healthStatistics['1']}`;
-                      
-                      // Добавляем информацию о количестве загруженных объектов
-                      setSnackbarMessage(`GeoJSON успешно загружен: ${featureCount} объектов. ${healthSummary}`);
-                      
-                      // Если это файл с резервуарами, устанавливаем флаг
-                      if (file.name.toLowerCase().includes('oil') || 
-                          file.name.toLowerCase().includes('reservoir') || 
-                          (geoJSON.name && geoJSON.name.includes('БОЧКИ'))) {
-                        setSelectedSearches(prev => {
-                          if (!prev.includes('reservoirs')) {
-                            return [...prev, 'reservoirs'];
-                          }
-                          return prev;
-                        });
-                      }
-                    } else {
-                      setSnackbarMessage(`Ошибка: карта не готова к отображению GeoJSON`);
-                    }
-                    
-                    setIsAnalyzing(false);
-                    setSnackbarOpen(true);
+                      return prev;
+                    });
                   }
-                  
-                  setAnalysisProgress(progress);
-                }, 1000); // обновляем каждую секунду
-                
-                // В случае ошибки убираем прогресс-бар
-                setTimeout(() => {
-                  if (isAnalyzing) {
-                    clearInterval(progressInterval);
-                    setIsAnalyzing(false);
-                  }
-                }, 16000); // таймаут чуть больше 15 секунд на всякий случай
+                } else {
+                  setSnackbarMessage(`Ошибка: карта не готова к отображению GeoJSON`);
+                }
+                setIsAnalyzing(false);
+                setSnackbarOpen(true);
               } catch (error) {
                 console.error('Ошибка загрузки GeoJSON:', error);
                 setSnackbarMessage(`Ошибка загрузки GeoJSON: ${error}`);
@@ -232,7 +175,8 @@ const HomePage: React.FC = () => {
             };
             reader.readAsText(file);
           }
-        };document.body.appendChild(fileInput);
+        };
+        document.body.appendChild(fileInput);
         fileInput.click();
         document.body.removeChild(fileInput);
         break;
@@ -491,7 +435,7 @@ const HomePage: React.FC = () => {
     reader.onload = (event) => {
       try {
         const geoJSON = JSON.parse(event.target?.result as string);        if (mapRef.current && mapRef.current.loadGeoJSON) {
-          mapRef.current.loadGeoJSON(geoJSON, undefined, true);
+          mapRef.current.loadGeoJSON(geoJSON, undefined, false);
           setSnackbarMessage(`Файл ${file.name} загружен и резервуары отображены на карте. Проверка резервуаров включена.`);
         } else {
           setSnackbarMessage(`Файл ${file.name} загружен. Проверка резервуаров включена.`);
@@ -1048,6 +992,33 @@ const HomePage: React.FC = () => {
       setSnackbarMessage(`Добавлен полигон: ${geoJSON.properties?.name || 'Территория'}`);
       setSnackbarOpen(true);
     }
+  }, [mapRef]);
+
+  useEffect(() => {
+    // Обработка события загрузки geojson из DashboardMenu
+    const handler = (e: any) => {
+      const geoJSON = e.detail;
+      if (!geoJSON || !geoJSON.features || !Array.isArray(geoJSON.features) || geoJSON.features.length === 0) {
+        setSnackbarMessage('Файл не содержит объектов GeoJSON');
+        setSnackbarOpen(true);
+        return;
+      }
+      // Очищаем предыдущие объекты перед загрузкой новых
+      if (mapRef.current && mapRef.current.loadGeoJSON) {
+        mapRef.current.loadGeoJSON(geoJSON, undefined, false);
+        if (mapRef.current.exportFeatures) {
+          const allFeatures = mapRef.current.exportFeatures();
+          setAoiPolygons(allFeatures);
+        }
+        setSnackbarMessage(`GeoJSON успешно загружен: ${geoJSON.features.length} объектов.`);
+      } else {
+        setSnackbarMessage('Ошибка: карта не готова к отображению GeoJSON');
+      }
+      setIsAnalyzing(false);
+      setSnackbarOpen(true);
+    };
+    window.addEventListener('dashboard-upload-geojson', handler);
+    return () => window.removeEventListener('dashboard-upload-geojson', handler);
   }, [mapRef]);
 
   return (

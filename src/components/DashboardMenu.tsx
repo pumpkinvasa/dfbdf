@@ -23,12 +23,14 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import PublicIcon from '@mui/icons-material/Public';
 import MapIcon from '@mui/icons-material/Map';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { GeoJSON } from 'ol/format';
 import { getArea } from 'ol/sphere';
 import { toLonLat } from 'ol/proj';
 import Polygon from 'ol/geom/Polygon';
 import MultiPolygon from 'ol/geom/MultiPolygon';
 import QuickPolygonSelector from './QuickPolygonSelector';
+import FileUploadDialog from './FileUploadDialog';
 
 interface DashboardMenuProps {
   open: boolean;
@@ -66,7 +68,10 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
   onPolygonPartHover,
   onPolygonPartDelete,
   polygonPartVisibility
-}) => {const theme = useTheme();  const [quickPolygonSelectorOpen, setQuickPolygonSelectorOpen] = useState(false);
+}) => {
+  const theme = useTheme();
+  const [quickPolygonSelectorOpen, setQuickPolygonSelectorOpen] = useState(false);
+  const [fileUploadDialogOpen, setFileUploadDialogOpen] = useState(false); // состояние для диалога загрузки
   const [expandedPolygons, setExpandedPolygons] = useState<Set<number>>(new Set());
   const [hoveredPart, setHoveredPart] = useState<{polygonIndex: number, partIndex: number} | null>(null);
   
@@ -82,7 +87,6 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
         features: [polygon]
       };
 
-      // Конвертируем в JSON строку
       const dataStr = JSON.stringify(geoJsonData, null, 2);
       
       // Создаем Blob
@@ -488,6 +492,14 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
       );
     });
   };
+  // Обработчик загрузки файла (можно пробросить через пропсы или реализовать здесь)
+  const handleFileUpload = (file: File) => {
+    // Для простоты: диспатчим кастомное событие, чтобы HomePage мог обработать (или пробрасываем через пропсы)
+    const event = new CustomEvent('dashboard-upload-geojson', { detail: file });
+    window.dispatchEvent(event);
+    setFileUploadDialogOpen(false);
+  };
+
   return (
     <>
     <Drawer
@@ -548,8 +560,61 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
         >
           Быстрый полигон
         </Button>
+        {/* Кнопка загрузки GeoJSON с тем же функционалом, что и в RightSidebar */}
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<CloudUploadIcon />}
+          sx={{
+            mt: 1,
+            borderColor: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+            color: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+            '&:hover': {
+              borderColor: theme.palette.mode === 'dark' ? '#00E5C5' : theme.palette.primary.main,
+              backgroundColor: theme.palette.mode === 'dark' 
+                ? 'rgba(0, 229, 197, 0.08)' 
+                : 'rgba(25, 118, 210, 0.08)',
+            },
+          }}
+          onClick={() => {
+            // Тот же функционал, что и в RightSidebar/HomePage
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.geojson,.json';
+            fileInput.style.display = 'none';
+            fileInput.onchange = (e) => {
+              const target = e.target as HTMLInputElement;
+              const file = target.files?.[0];
+              if (file) {
+                // --- Копия логики из HomePage/RightSidebar ---
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  try {
+                    const geoJSON = JSON.parse(event.target?.result as string);
+                    if (!geoJSON || !geoJSON.features || !Array.isArray(geoJSON.features) || geoJSON.features.length === 0) {
+                      alert('Файл не содержит объектов GeoJSON');
+                      return;
+                    }
+                    // Диспатчим событие для HomePage (или используйте callback через пропсы)
+                    const customEvent = new CustomEvent('dashboard-upload-geojson', { detail: geoJSON });
+                    window.dispatchEvent(customEvent);
+                  } catch (error) {
+                    alert('Ошибка загрузки GeoJSON: ' + error);
+                  }
+                };
+                reader.readAsText(file);
+              }
+            };
+            document.body.appendChild(fileInput);
+            fileInput.click();
+            document.body.removeChild(fileInput);
+          }}
+        >
+          Загрузить GeoJSON
+        </Button>
       </Box>
-      <Divider sx={{ flexShrink: 0 }} />{/* Прокручиваемый контент */}
+      <Divider sx={{ flexShrink: 0 }} />
+      {/* Прокручиваемый контент */}
       <Box sx={{
         flex: 1,
         overflow: 'auto',
@@ -727,6 +792,16 @@ const DashboardMenu: React.FC<DashboardMenuProps> = ({
             )}
           </List>        </Box>
       </Box>
+
+      {/* Диалог загрузки GeoJSON */}
+      <FileUploadDialog
+        open={fileUploadDialogOpen}
+        onClose={() => setFileUploadDialogOpen(false)}
+        onFileUpload={handleFileUpload}
+        title="Загрузка GeoJSON"
+        description="Загрузите .geojson файл с полигонами AOI"
+        acceptedFormats=".geojson,.json"
+      />
     </Drawer>
 
     {/* Диалог быстрого выбора полигона */}
